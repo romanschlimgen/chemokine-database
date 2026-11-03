@@ -58,7 +58,7 @@ Nothing else needs to change.
 | `analysis_method` | whatever software/pipeline produced the number, for provenance |
 | `raw_data_file` | filename in `data/raw_binding/`, if you want the raw file linked |
 | `legacy_figure` | filename in `data/legacy_figures/`, if there's an old static figure to keep around |
-| `fit_bottom`, `fit_top`, `fit_hill` | four-parameter logistic fit params (baseline, Bmax, Hill slope) — lets the site draw the actual fitted curve, not just scatter the raw points |
+| `fit_bottom`, `fit_top` | three-parameter logistic fit params (baseline, Bmax; Hill slope is fixed at 1) — lets the site draw the actual fitted curve, not just scatter the raw points |
 | `fit_r2` | fit quality |
 | `notes` | free text |
 
@@ -81,16 +81,21 @@ python3 scripts/analyze_binding.py
 python3 scripts/build_db.py
 ```
 
-The first command fits a four-parameter logistic curve per chemokine column
-(the standard nonlinear-regression model for this kind of dose-response
-curve) and **regenerates `data/binding.csv` from scratch** — don't hand-edit
-its numeric columns, they'll be overwritten; `legacy_figure` is the one field
-it carries over automatically. It also writes the raw (concentration, BRET)
+The first command fits a three-parameter logistic curve per chemokine column
+(GraphPad's "log(agonist) vs. response", Hill slope fixed at 1:
+`Y = Bottom + (Top - Bottom) / (1 + 10^(LogEC50 - X))`, X = log10(concentration))
+and **regenerates `data/binding.csv` from scratch** — don't hand-edit its
+numeric columns, they'll be overwritten; `legacy_figure` is the one field it
+carries over automatically. It also writes the raw (concentration, BRET)
 points to `data/binding_curves/<pair_id>.csv` so the site can plot both the
-real data and the fitted curve. If a chemokine's curve never rises
-meaningfully above baseline, it's reported as no detectable binding (blank
-Kd) rather than fitting a number to noise — see `MIN_DYNAMIC_RANGE` in the
-script if you want to tune that cutoff.
+real data and the fitted curve, on a log concentration axis. If a
+chemokine's curve never rises meaningfully above baseline, it's reported as
+no detectable binding (blank Kd) rather than fitting a number to noise —
+see `MIN_DYNAMIC_RANGE` in the script if you want to tune that cutoff. If
+the fitted EC50 falls outside the concentration range actually tested, the
+notes say so — the number is still reported (it's the best estimate from
+the curve's rising portion) but should be read as an extrapolation, not an
+observed plateau.
 
 A `pair_id` the script derives (`<RECEPTOR_ID>_<CHEMOKINE_ID>`) must exist in
 `pairs.csv` — add a row for it (structure columns can stay blank) and a

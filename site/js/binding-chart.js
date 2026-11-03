@@ -1,12 +1,13 @@
 // Renders a BRET saturation-binding chart: the real (concentration, BRET)
 // data points from data/raw_binding/ (via build_db.py -> binding_curve_points)
-// plus the fitted four-parameter logistic curve from scripts/analyze_binding.py,
-// on a log concentration axis. If there's no fit (e.g. no detectable binding),
-// just the points are drawn.
-function logistic4pl(concM, bottom, top, kdNm, hill) {
+// plus the fitted three-parameter logistic curve (Hill slope fixed at 1)
+// from scripts/analyze_binding.py, on a log concentration axis. If there's
+// no fit (e.g. no detectable binding), just the points are drawn.
+//   Y = bottom + (top - bottom) / (1 + 10^(logEC50 - X)), X = log10(concM)
+function logistic3pl(concM, bottom, top, ec50Nm) {
   const logx = Math.log10(concM);
-  const logkd = Math.log10(kdNm * 1e-9);
-  return bottom + (top - bottom) / (1 + Math.pow(10, (logkd - logx) * hill));
+  const logec50 = Math.log10(ec50Nm * 1e-9);
+  return bottom + (top - bottom) / (1 + Math.pow(10, logec50 - logx));
 }
 
 function formatConc(m) {
@@ -59,7 +60,7 @@ function renderBindingChart(svgSelector, points, fit) {
     const curvePoints = d3.range(steps + 1).map((i) => {
       const logc = Math.log10(lo) + (i / steps) * (Math.log10(hi) - Math.log10(lo));
       const c = Math.pow(10, logc);
-      return [c, logistic4pl(c, fit.bottom, fit.top, fit.kd_nm, fit.hill)];
+      return [c, logistic3pl(c, fit.bottom, fit.top, fit.kd_nm)];
     });
     const line = d3.line().x((d) => x(d[0])).y((d) => y(d[1]));
     svg

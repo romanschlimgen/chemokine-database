@@ -16,16 +16,15 @@ Input format (data/raw_binding/<RECEPTOR_ID>.csv) — see data/README.md:
 
 Model: this is a direct (saturation) binding assay — an NLuc-tagged receptor
 (BRET donor) titrated with an AZDye-labeled chemokine (acceptor) — not a
-competition assay, so it yields an apparent Kd, not an IC50. Each chemokine's
-BRET-ratio-vs-concentration curve is fit with a four-parameter logistic
-(the standard nonlinear regression model for this kind of dose-response
-curve, equivalent to GraphPad's "log(agonist) vs. response -- Variable
-slope"):
+competition assay, so it yields an apparent Kd (reported here as EC50, the
+concentration at half-maximal BRET), not an IC50. Each chemokine's
+BRET-ratio-vs-concentration curve is fit with a three-parameter logistic,
+Hill slope fixed at 1 (GraphPad's "log(agonist) vs. response", standard
+slope), with X = log10(concentration in M):
 
-    BRET(x) = bottom + (top - bottom) / (1 + 10**((logKd - log10(x)) * hill))
+    Y = Bottom + (Top - Bottom) / (1 + 10**(LogEC50 - X))
 
-giving an apparent Kd (the concentration at half-maximal BRET), Bmax
-("top"), baseline ("bottom"), and Hill slope per chemokine.
+giving Bottom (baseline), Top (Bmax), and LogEC50 per chemokine.
 """
 import csv
 import re
@@ -48,25 +47,26 @@ MIN_DYNAMIC_RANGE = 1.0
 BINDING_FIELDS = [
     "binding_id", "pair_id", "assay_type", "kd_nm", "ic50_nm", "n_replicates",
     "analysis_method", "raw_data_file", "legacy_figure",
-    "fit_bottom", "fit_top", "fit_hill", "fit_r2", "notes",
+    "fit_bottom", "fit_top", "fit_r2", "notes",
 ]
 
 
-def logistic(logx, bottom, top, logkd, hill):
-    return bottom + (top - bottom) / (1 + 10 ** ((logkd - logx) * hill))
+def logistic(logx, bottom, top, logec50):
+    return bottom + (top - bottom) / (1 + 10 ** (logec50 - logx))
 
 
 def fit_curve(conc_m, bret):
     logconc = np.log10(conc_m)
-    p0 = [1.0, bret.max(), float(np.median(logconc)), 1.0]
-    bounds = ([-np.inf, 0, logconc.min() - 4, 0.1], [np.inf, np.inf, logconc.max() + 4, 20])
+    p0 = [1.0, bret.max(), float(np.median(logconc))]
+    bounds = ([-np.inf, 0, logconc.min() - 4], [np.inf, np.inf, logconc.max() + 4])
     popt, _ = curve_fit(logistic, logconc, bret, p0=p0, bounds=bounds, maxfev=20000)
-    bottom, top, logkd, hill = (float(v) for v in popt)
+    bottom, top, logec50 = (float(v) for v in popt)
     pred = logistic(logconc, *popt)
     ss_res = float(np.sum((bret - pred) ** 2))
     ss_tot = float(np.sum((bret - bret.mean()) ** 2))
     r2 = 1 - ss_res / ss_tot if ss_tot > 0 else float("nan")
-    return {"bottom": bottom, "top": top, "kd_m": 10 ** logkd, "hill": hill, "r2": r2}
+    extrapolated = logec50 > logconc.max() or logec50 < logconc.min()
+    return {"bottom": bottom, "top": top, "ec50_m": 10 ** logec50, "r2": r2, "extrapolated": extrapolated}
 
 
 def chemokine_id_from_column(column_header):
@@ -120,29 +120,35 @@ def main():
                         f"No detectable binding: BRET ratio vs. log[{col}] never rose "
                         f"meaningfully above baseline (fitted dynamic range "
                         f"{dynamic_range:.2f}, below the {MIN_DYNAMIC_RANGE:.1f} cutoff), "
-                        "so a Kd was not reported rather than fitting noise."
+                        "so an EC50 was not reported rather than fitting noise."
                     )
-                    fit_fields = {"kd_nm": "", "fit_bottom": "", "fit_top": "", "fit_hill": "", "fit_r2": ""}
+                    fit_fields = {"kd_nm": "", "fit_bottom": "", "fit_top": "", "fit_r2": ""}
                     print(f"  {pair_id}: no detectable binding (dynamic range {dynamic_range:.2f})")
                 else:
-                    kd_nm = fit["kd_m"] * 1e9
+                    kd_nm = fit["ec50_m"] * 1e9
+                    caveat = (
+                        " This EC50 extrapolates beyond the concentration range actually "
+                        "tested, so it's a rough estimate from the curve's rising portion, "
+                        "not a directly observed plateau."
+                        if fit["extrapolated"]
+                        else ""
+                    )
                     notes = (
-                        f"Apparent Kd from a four-parameter logistic fit (scipy nonlinear "
-                        f"regression) of BRET ratio vs. log[{col}]. "
-                        f"Bmax={fit['top']:.2f}, baseline={fit['bottom']:.2f}, "
-                        f"Hill slope={fit['hill']:.2f}, R²={fit['r2']:.4f}."
+                        f"LogEC50 from a three-parameter logistic fit (Hill slope fixed at 1; "
+                        f"scipy nonlinear regression) of BRET ratio vs. log[{col}]. "
+                        f"Bmax={fit['top']:.2f}, baseline={fit['bottom']:.2f}, R²={fit['r2']:.4f}."
+                        f"{caveat}"
                     )
                     fit_fields = {
                         "kd_nm": f"{kd_nm:.4g}",
                         "fit_bottom": f"{fit['bottom']:.4g}",
                         "fit_top": f"{fit['top']:.4g}",
-                        "fit_hill": f"{fit['hill']:.4g}",
                         "fit_r2": f"{fit['r2']:.4g}",
                     }
-                    print(f"  {pair_id}: Kd={kd_nm:.2f} nM  Bmax={fit['top']:.2f}  R2={fit['r2']:.4f}")
+                    print(f"  {pair_id}: EC50={kd_nm:.2f} nM  Bmax={fit['top']:.2f}  R2={fit['r2']:.4f}{' [extrapolated]' if fit['extrapolated'] else ''}")
             except RuntimeError as e:
                 notes = f"Curve fit failed to converge for {col} ({e}); raw data is still available."
-                fit_fields = {"kd_nm": "", "fit_bottom": "", "fit_top": "", "fit_hill": "", "fit_r2": ""}
+                fit_fields = {"kd_nm": "", "fit_bottom": "", "fit_top": "", "fit_r2": ""}
                 print(f"  {pair_id}: FIT FAILED")
 
             rows_out.append({
@@ -151,7 +157,7 @@ def main():
                 "assay_type": "BRET saturation binding (NLuc receptor / AZDye568 chemokine)",
                 "ic50_nm": "",
                 "n_replicates": "",
-                "analysis_method": "Four-parameter logistic fit (scipy.optimize.curve_fit); scripts/analyze_binding.py",
+                "analysis_method": "Three-parameter logistic fit, Hill slope fixed at 1 (scipy.optimize.curve_fit); scripts/analyze_binding.py",
                 "raw_data_file": raw_file.name,
                 "legacy_figure": legacy_by_pair.get(pair_id, ""),
                 "notes": notes,

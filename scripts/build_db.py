@@ -102,7 +102,7 @@ def main():
             binding_id TEXT PRIMARY KEY, pair_id TEXT, assay_type TEXT,
             kd_nm REAL, ic50_nm REAL, n_replicates INTEGER,
             analysis_method TEXT, raw_data_file TEXT, legacy_figure TEXT,
-            fit_bottom REAL, fit_top REAL, fit_hill REAL, fit_r2 REAL, notes TEXT)"""
+            fit_bottom REAL, fit_top REAL, fit_r2 REAL, notes TEXT)"""
     )
     cur.execute(
         """CREATE TABLE binding_curve_points (
@@ -140,11 +140,11 @@ def main():
     binding_csv = DATA_DIR / "binding.csv"
     if binding_csv.exists():
         binding = read_csv(binding_csv)
-        numeric_fields = ["kd_nm", "ic50_nm", "n_replicates", "fit_bottom", "fit_top", "fit_hill", "fit_r2"]
+        numeric_fields = ["kd_nm", "ic50_nm", "n_replicates", "fit_bottom", "fit_top", "fit_r2"]
         cur.executemany(
             """INSERT INTO binding VALUES (:binding_id,:pair_id,:assay_type,:kd_nm,
                :ic50_nm,:n_replicates,:analysis_method,:raw_data_file,:legacy_figure,
-               :fit_bottom,:fit_top,:fit_hill,:fit_r2,:notes)""",
+               :fit_bottom,:fit_top,:fit_r2,:notes)""",
             [{**b, **{f: b.get(f) or None for f in numeric_fields}} for b in binding],
         )
 

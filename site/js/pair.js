@@ -119,7 +119,7 @@ function fmtNum(v, unit) {
   if (bindingCurvePoints.length) {
     const fitRow = binding.find((r) => r.fit_top !== null && r.fit_top !== undefined);
     const fit = fitRow
-      ? { bottom: fitRow.fit_bottom, top: fitRow.fit_top, hill: fitRow.fit_hill, kd_nm: fitRow.kd_nm }
+      ? { bottom: fitRow.fit_bottom, top: fitRow.fit_top, kd_nm: fitRow.kd_nm }
       : null;
     renderBindingChart("#bindingChart", bindingCurvePoints, fit);
   }
