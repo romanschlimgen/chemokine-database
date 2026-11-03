@@ -52,6 +52,17 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
   });
   await viewer.loadStructureFromUrl(pdbUrl, "pdb", false);
 
+  // White background (Mol*'s default is a very light grey) and a "side"
+  // orientation instead of whatever the initial auto-view lands on — Mol*'s
+  // PCA-based axis alignment reliably turns an elongated structure like a
+  // membrane receptor so its long axis (here, the TM helix bundle) runs
+  // across the screen instead of pointing into it.
+  viewer.plugin.canvas3d?.setProps({ renderer: { backgroundColor: 0xffffff } });
+  // orientAxes() needs the renderer's bounding sphere, which isn't ready the
+  // instant loadStructureFromUrl resolves — give it a frame.
+  await new Promise(requestAnimationFrame);
+  viewer.plugin.managers.camera.orientAxes();
+
   const queryMods = await loadQueryModules();
 
   if (chainColors && chainColors.length) {
