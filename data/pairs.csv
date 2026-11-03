@@ -1,2 +1,8 @@
 pair_id,receptor_id,chemokine_id,pair_type,model_confidence,structure_file,receptor_chain,chemokine_chain,notes
 CXCR4_CXCL12,CXCR4,CXCL12,validated,,CXCR4_CXCL12.pdb,A,B,Demo pair carried over from the original site. model_confidence left blank pending the new modeling pipeline.
+CXCR4_CXCL4,CXCR4,CXCL4,tested,,,,,BRET binding tested; no structural model yet.
+CXCR4_CXCL9,CXCR4,CXCL9,tested,,,,,BRET binding tested; no structural model yet.
+CXCR4_CXCL10,CXCR4,CXCL10,tested,,,,,BRET binding tested; no structural model yet.
+CXCR4_CXCL11,CXCR4,CXCL11,tested,,,,,BRET binding tested; no structural model yet.
+CXCR4_CXCL13,CXCR4,CXCL13,tested,,,,,BRET binding tested; no structural model yet.
+CXCR4_CXCL14,CXCR4,CXCL14,tested,,,,,BRET binding tested; no structural model yet.

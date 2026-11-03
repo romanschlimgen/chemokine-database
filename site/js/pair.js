@@ -51,17 +51,19 @@ function fmtNum(v, unit) {
   }
 
   const binding = queryAll(db, "SELECT * FROM binding WHERE pair_id = ?", [pairId]);
-  const contacts = queryAll(db, "SELECT * FROM contacts WHERE pair_id = ?", [pairId]);
-  const receptorResidues = queryAll(
+  const bindingCurvePoints = queryAll(
     db,
-    "SELECT resnum, resname FROM residues WHERE pair_id = ? AND chain_role = 'receptor' ORDER BY resnum",
+    "SELECT conc_m, bret FROM binding_curve_points WHERE pair_id = ? ORDER BY conc_m",
     [pairId]
   );
-  const chemokineResidues = queryAll(
-    db,
-    "SELECT resnum, resname FROM residues WHERE pair_id = ? AND chain_role = 'chemokine' ORDER BY resnum",
-    [pairId]
-  );
+  const hasStructure = !!pair.structure_file;
+  const contacts = hasStructure ? queryAll(db, "SELECT * FROM contacts WHERE pair_id = ?", [pairId]) : [];
+  const receptorResidues = hasStructure
+    ? queryAll(db, "SELECT resnum, resname FROM residues WHERE pair_id = ? AND chain_role = 'receptor' ORDER BY resnum", [pairId])
+    : [];
+  const chemokineResidues = hasStructure
+    ? queryAll(db, "SELECT resnum, resname FROM residues WHERE pair_id = ? AND chain_role = 'chemokine' ORDER BY resnum", [pairId])
+    : [];
 
   content.innerHTML = `
     <h2 class="pair-title">${escapeHtml(pair.receptor_name)} &ndash; ${escapeHtml(pair.chemokine_name)}</h2>
@@ -72,6 +74,9 @@ function fmtNum(v, unit) {
       <span><strong>Chemokine class:</strong> ${escapeHtml(pair.chemokine_class || "")} ${pair.chemokine_uniprot ? `(UniProt ${escapeHtml(pair.chemokine_uniprot)})` : ""}</span>
     </div>
 
+    ${
+      hasStructure
+        ? `
     <div class="grid-2">
       <div class="panel">
         <h2>Structure model</h2>
@@ -95,25 +100,44 @@ function fmtNum(v, unit) {
         &#8681; Download structure (${escapeHtml(pair.structure_file.split(".").pop().toUpperCase())})
       </a>
     </div>
+    `
+        : `
+    <div class="panel">
+      <h2>Structure model</h2>
+      <p class="pending">No structural model for this pair yet.</p>
+    </div>
+    `
+    }
 
     <div class="panel">
       <h2>Binding / pharmacology</h2>
-      ${renderBinding(binding)}
+      ${renderBinding(binding, bindingCurvePoints)}
       ${pair.notes ? `<div class="note">${escapeHtml(pair.notes)}</div>` : ""}
     </div>
   `;
 
-  // Structure viewer (Mol*), colored to match the receptor/chemokine logo.
-  const structureViewer = createStructureViewer("viewport", `data/structures/${pair.structure_file}`, [
-    { chain: pair.receptor_chain, rgb: RECEPTOR_RGB },
-    { chain: pair.chemokine_chain, rgb: CHEMOKINE_RGB },
-  ]).catch((err) => {
-    document.getElementById("viewport").innerHTML =
-      `<div class="loading">Could not load the structure viewer: ${escapeHtml(err.message)}</div>`;
-    return null;
-  });
+  if (bindingCurvePoints.length) {
+    const fitRow = binding.find((r) => r.fit_top !== null && r.fit_top !== undefined);
+    const fit = fitRow
+      ? { bottom: fitRow.fit_bottom, top: fitRow.fit_top, hill: fitRow.fit_hill, kd_nm: fitRow.kd_nm }
+      : null;
+    renderBindingChart("#bindingChart", bindingCurvePoints, fit);
+  }
 
-  renderContactDiagram(
+  // Structure viewer (Mol*), colored to match the receptor/chemokine logo —
+  // only when there's actually a model for this pair.
+  const structureViewer = hasStructure
+    ? createStructureViewer("viewport", `data/structures/${pair.structure_file}`, [
+        { chain: pair.receptor_chain, rgb: RECEPTOR_RGB },
+        { chain: pair.chemokine_chain, rgb: CHEMOKINE_RGB },
+      ]).catch((err) => {
+        document.getElementById("viewport").innerHTML =
+          `<div class="loading">Could not load the structure viewer: ${escapeHtml(err.message)}</div>`;
+        return null;
+      })
+    : Promise.resolve(null);
+
+  if (hasStructure) renderContactDiagram(
     "#contactSvg",
     { receptorResidues, chemokineResidues, contacts },
     {
@@ -162,12 +186,17 @@ function fmtNum(v, unit) {
     viewportEl.style.height = `${currentViewportHeight + extra}px`;
   }
 
-  function renderBinding(rows) {
+  function renderBinding(rows, curvePoints) {
     if (!rows.length) {
       return '<p class="pending">No binding data yet.</p>';
     }
     const numeric = rows.filter((r) => r.kd_nm !== null || r.ic50_nm !== null);
     const parts = [];
+
+    if (curvePoints.length) {
+      parts.push('<svg id="bindingChart" width="100%"></svg>');
+    }
+
     if (numeric.length) {
       parts.push(
         numeric
@@ -178,18 +207,25 @@ function fmtNum(v, unit) {
             K<sub>d</sub> ${fmtNum(r.kd_nm, "nM")}, IC<sub>50</sub> ${fmtNum(r.ic50_nm, "nM")}
             ${r.n_replicates ? `(n=${r.n_replicates})` : ""}
             ${r.analysis_method ? `<br><span class="note">Analysis: ${escapeHtml(r.analysis_method)}</span>` : ""}
+            ${r.notes ? `<br><span class="note">${escapeHtml(r.notes)}</span>` : ""}
           </p>`
           )
           .join("")
       );
     } else {
-      parts.push('<p class="pending">Numeric values pending reanalysis.</p>');
+      parts.push(
+        rows
+          .map(
+            (r) => `<p class="pending">${r.notes ? escapeHtml(r.notes) : "Numeric values pending reanalysis."}</p>`
+          )
+          .join("")
+      );
     }
     const legacy = rows.find((r) => r.legacy_figure);
     if (legacy) {
       parts.push(`
         <img class="legacy-figure" src="data/legacy_figures/${encodeURIComponent(legacy.legacy_figure)}" alt="Legacy binding figure" />
-        <p class="note">Legacy figure from the original site (not yet digitized into numeric values).</p>
+        <p class="note">Legacy figure from the original site, kept for reference${curvePoints.length ? " (superseded by the chart above, fit from the same underlying data)" : ""}.</p>
       `);
     }
     return parts.join("");

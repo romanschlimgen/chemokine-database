@@ -101,7 +101,12 @@ def main():
         """CREATE TABLE binding (
             binding_id TEXT PRIMARY KEY, pair_id TEXT, assay_type TEXT,
             kd_nm REAL, ic50_nm REAL, n_replicates INTEGER,
-            analysis_method TEXT, raw_data_file TEXT, legacy_figure TEXT, notes TEXT)"""
+            analysis_method TEXT, raw_data_file TEXT, legacy_figure TEXT,
+            fit_bottom REAL, fit_top REAL, fit_hill REAL, fit_r2 REAL, notes TEXT)"""
+    )
+    cur.execute(
+        """CREATE TABLE binding_curve_points (
+            pair_id TEXT, conc_m REAL, bret REAL)"""
     )
     cur.execute(
         """CREATE TABLE contacts (
@@ -135,22 +140,31 @@ def main():
     binding_csv = DATA_DIR / "binding.csv"
     if binding_csv.exists():
         binding = read_csv(binding_csv)
+        numeric_fields = ["kd_nm", "ic50_nm", "n_replicates", "fit_bottom", "fit_top", "fit_hill", "fit_r2"]
         cur.executemany(
             """INSERT INTO binding VALUES (:binding_id,:pair_id,:assay_type,:kd_nm,
-               :ic50_nm,:n_replicates,:analysis_method,:raw_data_file,:legacy_figure,:notes)""",
-            [
-                {
-                    **b,
-                    "kd_nm": b["kd_nm"] or None,
-                    "ic50_nm": b["ic50_nm"] or None,
-                    "n_replicates": b["n_replicates"] or None,
-                }
-                for b in binding
-            ],
+               :ic50_nm,:n_replicates,:analysis_method,:raw_data_file,:legacy_figure,
+               :fit_bottom,:fit_top,:fit_hill,:fit_r2,:notes)""",
+            [{**b, **{f: b.get(f) or None for f in numeric_fields}} for b in binding],
         )
 
+    curves_dir = DATA_DIR / "binding_curves"
+    if curves_dir.exists():
+        for curve_file in sorted(curves_dir.glob("*.csv")):
+            pair_id = curve_file.stem
+            points = read_csv(curve_file)
+            cur.executemany(
+                "INSERT INTO binding_curve_points VALUES (:pair_id, :conc_m, :bret)",
+                [{"pair_id": pair_id, "conc_m": p["conc_m"], "bret": p["bret"]} for p in points],
+            )
+
     # structures + contacts (real contacts computed from coordinates unless overridden)
+    # structure_file is optional — a pair can exist with binding data only,
+    # pending a structural model, and the site just skips the structure
+    # viewer and contact diagram for it.
     for p in pairs:
+        if not p["structure_file"]:
+            continue
         src = DATA_DIR / "structures" / p["structure_file"]
         if not src.exists():
             print(f"  WARNING: structure file missing for {p['pair_id']}: {src}")

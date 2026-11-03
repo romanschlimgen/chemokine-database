@@ -1,2 +1,8 @@
 chemokine_id,name,systematic_name,class,uniprot_id,notes
 CXCL12,CXCL12,SDF-1,CXC,P48061,Carried over from the original site as the single worked example.
+CXCL4,CXCL4,PF4,CXC,P02776,
+CXCL9,CXCL9,MIG,CXC,Q07325,
+CXCL10,CXCL10,IP-10,CXC,P02778,
+CXCL11,CXCL11,I-TAC,CXC,O14625,
+CXCL13,CXCL13,BCA-1,CXC,O43927,
+CXCL14,CXCL14,BRAK,CXC,O95715,
