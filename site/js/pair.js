@@ -1,5 +1,10 @@
 import { createStructureViewer } from "./molstar-viewer.js";
 
+// Matches site/assets/chemokinedb.png (the logo): grey blob = receptor, blue
+// blob = chemokine. Sampled directly from the image's dominant pixel colors.
+const RECEPTOR_RGB = [147, 149, 152];
+const CHEMOKINE_RGB = [15, 117, 188];
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -47,6 +52,16 @@ function fmtNum(v, unit) {
 
   const binding = queryAll(db, "SELECT * FROM binding WHERE pair_id = ?", [pairId]);
   const contacts = queryAll(db, "SELECT * FROM contacts WHERE pair_id = ?", [pairId]);
+  const receptorResidues = queryAll(
+    db,
+    "SELECT resnum, resname FROM residues WHERE pair_id = ? AND chain_role = 'receptor' ORDER BY resnum",
+    [pairId]
+  );
+  const chemokineResidues = queryAll(
+    db,
+    "SELECT resnum, resname FROM residues WHERE pair_id = ? AND chain_role = 'chemokine' ORDER BY resnum",
+    [pairId]
+  );
 
   content.innerHTML = `
     <h2 class="pair-title">${escapeHtml(pair.receptor_name)} &ndash; ${escapeHtml(pair.chemokine_name)}</h2>
@@ -64,35 +79,36 @@ function fmtNum(v, unit) {
         <div class="note">
           ${escapeHtml(pair.receptor_name)} = chain ${escapeHtml(pair.receptor_chain)},
           ${escapeHtml(pair.chemokine_name)} = chain ${escapeHtml(pair.chemokine_chain)}.
-          Hover the contact diagram below to highlight residues here.
+          Hover the contact diagram to highlight residues here.
         </div>
       </div>
 
       <div class="panel">
-        <h2>Binding / pharmacology</h2>
-        ${renderBinding(binding)}
+        <h2>Inter-chain contacts (&le; 4 &#8491;, computed from the model coordinates)</h2>
+        <svg id="contactSvg" width="100%"></svg>
       </div>
     </div>
 
     <div class="panel">
-      <h2>Inter-chain contacts (&le; 4 &#8491;, computed from the model coordinates)</h2>
-      <svg id="contactSvg" width="100%"></svg>
+      <h2>Binding / pharmacology</h2>
+      ${renderBinding(binding)}
       ${pair.notes ? `<div class="note">${escapeHtml(pair.notes)}</div>` : ""}
     </div>
   `;
 
-  // Structure viewer (Mol*)
-  const structureViewer = createStructureViewer("viewport", `data/structures/${pair.structure_file}`).catch(
-    (err) => {
-      document.getElementById("viewport").innerHTML =
-        `<div class="loading">Could not load the structure viewer: ${escapeHtml(err.message)}</div>`;
-      return null;
-    }
-  );
+  // Structure viewer (Mol*), colored to match the receptor/chemokine logo.
+  const structureViewer = createStructureViewer("viewport", `data/structures/${pair.structure_file}`, [
+    { chain: pair.receptor_chain, rgb: RECEPTOR_RGB },
+    { chain: pair.chemokine_chain, rgb: CHEMOKINE_RGB },
+  ]).catch((err) => {
+    document.getElementById("viewport").innerHTML =
+      `<div class="loading">Could not load the structure viewer: ${escapeHtml(err.message)}</div>`;
+    return null;
+  });
 
   renderContactDiagram(
     "#contactSvg",
-    contacts,
+    { receptorResidues, chemokineResidues, contacts },
     {
       receptor: pair.receptor_name,
       chemokine: pair.chemokine_name,

@@ -65,7 +65,10 @@ Leave numeric fields blank rather than guessing — the site renders blanks as
 
 ## Structure files
 
-Put every PDB model referenced by `pairs.csv` in `data/structures/`.
+Put every PDB model referenced by `pairs.csv` in `data/structures/`. The build
+script parses every residue of the receptor and chemokine chains straight out
+of the PDB file (not just the ones that happen to contact each other) to
+drive the circular contact diagram, so no separate residue list is needed.
 
 ## Contact overrides (optional)
 

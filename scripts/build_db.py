@@ -108,6 +108,10 @@ def main():
             pair_id TEXT, receptor_resnum INTEGER, receptor_resname TEXT,
             chemokine_resnum INTEGER, chemokine_resname TEXT, distance_angstrom REAL)"""
     )
+    cur.execute(
+        """CREATE TABLE residues (
+            pair_id TEXT, chain_role TEXT, resnum INTEGER, resname TEXT)"""
+    )
 
     receptors = read_csv(DATA_DIR / "receptors.csv")
     cur.executemany(
@@ -165,6 +169,18 @@ def main():
                :chemokine_resnum,:chemokine_resname,:distance_angstrom)""",
             [{**c, "pair_id": p["pair_id"]} for c in contacts],
         )
+
+        # Every residue in both chains, contact or not, so the diagram can show
+        # the whole sequence rather than just the subset that happens to touch.
+        for role, chain_id in (("receptor", p["receptor_chain"]), ("chemokine", p["chemokine_chain"])):
+            res = parse_pdb_atoms(src, chain_id)
+            cur.executemany(
+                "INSERT INTO residues VALUES (:pair_id, :chain_role, :resnum, :resname)",
+                [
+                    {"pair_id": p["pair_id"], "chain_role": role, "resnum": resnum, "resname": info["resname"]}
+                    for resnum, info in res.items()
+                ],
+            )
 
     legacy_dir = DATA_DIR / "legacy_figures"
     if legacy_dir.exists():

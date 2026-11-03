@@ -22,18 +22,25 @@ function loadQueryModules() {
       import(`https://esm.sh/molstar@${MOLSTAR_VERSION}/lib/mol-model/structure/query/context`),
       import(`https://esm.sh/molstar@${MOLSTAR_VERSION}/lib/mol-model/structure`),
       import(`https://esm.sh/molstar@${MOLSTAR_VERSION}/lib/mol-model/loci`),
-    ]).then(([builderMod, compilerMod, contextMod, structureMod, lociMod]) => ({
+      import(`https://esm.sh/molstar@${MOLSTAR_VERSION}/lib/mol-plugin-state/helpers/structure-selection-query`),
+      import(`https://esm.sh/molstar@${MOLSTAR_VERSION}/lib/mol-util/color`),
+    ]).then(([builderMod, compilerMod, contextMod, structureMod, lociMod, selectionQueryMod, colorMod]) => ({
       MS: builderMod.MolScriptBuilder,
       compile: compilerMod.compile,
       QueryContext: contextMod.QueryContext,
       StructureSelection: structureMod.StructureSelection,
       EmptyLoci: lociMod.EmptyLoci,
+      StructureSelectionQuery: selectionQueryMod.StructureSelectionQuery,
+      Color: colorMod.Color,
     }));
   }
   return queryModulesPromise;
 }
 
-export async function createStructureViewer(containerId, pdbUrl) {
+// chainColors: [{chain: 'A', rgb: [147, 149, 152]}, ...] — applied after load
+// to match the receptor/chemokine logo colors instead of Mol*'s default
+// per-chain palette.
+export async function createStructureViewer(containerId, pdbUrl, chainColors) {
   const viewer = await molstar.Viewer.create(containerId, {
     layoutIsExpanded: false,
     layoutShowControls: false,
@@ -46,6 +53,23 @@ export async function createStructureViewer(containerId, pdbUrl) {
   await viewer.loadStructureFromUrl(pdbUrl, "pdb", false);
 
   const queryMods = await loadQueryModules();
+
+  if (chainColors && chainColors.length) {
+    const { MS, StructureSelectionQuery, Color } = queryMods;
+    for (const { chain, rgb } of chainColors) {
+      const structureRef = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+      if (!structureRef) continue;
+      const expr = MS.struct.generator.atomGroups({
+        "chain-test": MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chain]),
+      });
+      const query = new StructureSelectionQuery(`Chain ${chain}`, expr);
+      const color = Color.fromRgb(rgb[0], rgb[1], rgb[2]);
+      await viewer.plugin.managers.structure.component.applyTheme(
+        { selection: query, action: { name: "color", params: { color } } },
+        [structureRef]
+      );
+    }
+  }
 
   function getStructure() {
     const current = viewer.plugin.managers.structure.hierarchy.current;
