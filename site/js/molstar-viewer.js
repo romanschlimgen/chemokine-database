@@ -173,33 +173,58 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     viewer.plugin.managers.interactivity.lociHighlights.highlightOnly({ loci: queryMods.EmptyLoci });
   }
 
-  // Adds a separate ball-and-stick component for the given residues (full
-  // side chains, not just the cartoon backbone), replacing whatever was
-  // there before. Tracked by its state-tree ref so it can be removed again
-  // without touching the base cartoon/coloring component.
-  let sideChainComponentRef = null;
+  // Adds one ball-and-stick component per chain among the given residues
+  // (full side chains, not just the cartoon backbone), replacing whatever
+  // was there before. A fresh component defaults to Mol*'s own element/
+  // chain palette, not the grey/blue theme applied to the cartoon;
+  // component.applyTheme(selection, ...) — which works fine for recoloring
+  // *existing* components like the cartoon — turned out not to reliably
+  // retheme a component added moments earlier in the same call, so this
+  // uses component.updateRepresentationsTheme(component, ...) instead,
+  // which targets the component directly rather than re-matching a
+  // selection, and only ever needs one color per component (hence one
+  // component per chain rather than one for the whole click). Tracked by
+  // each component's state-tree ref so they can be removed again without
+  // touching the base cartoon/coloring component.
+  let sideChainComponentRefs = [];
 
   async function showSideChains(residues) {
     await clearSideChains();
     if (!residues || !residues.length) return;
-    const structureRef = viewer.plugin.managers.structure.hierarchy.current.structures[0];
-    if (!structureRef) return;
-    const { StructureSelectionQuery } = queryMods;
-    const query = new StructureSelectionQuery("Side chains", buildResidueExpr(residues));
-    await viewer.plugin.managers.structure.component.add(
-      { selection: query, options: { checkExisting: false, label: "Side chains" }, representation: "ball-and-stick" },
-      [structureRef]
-    );
-    const updated = viewer.plugin.managers.structure.hierarchy.current.structures[0];
-    const comp = updated.components.find((c) => c.cell.obj && c.cell.obj.label === "Side chains");
-    sideChainComponentRef = comp ? comp.cell.transform.ref : null;
+    const { StructureSelectionQuery, Color } = queryMods;
+    const colorByChain = new Map((chainColors || []).map(({ chain, rgb }) => [chain, Color.fromRgb(rgb[0], rgb[1], rgb[2])]));
+
+    for (const chain of new Set(residues.map((r) => r.chain))) {
+      const structureRef = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+      if (!structureRef) continue;
+      const chainResidues = residues.filter((r) => r.chain === chain);
+      const label = `Side chains (${chain})`;
+      const query = new StructureSelectionQuery(label, buildResidueExpr(chainResidues));
+      await viewer.plugin.managers.structure.component.add(
+        { selection: query, options: { checkExisting: false, label }, representation: "ball-and-stick" },
+        [structureRef]
+      );
+      const updated = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+      const comp = updated.components.find((c) => c.cell.obj && c.cell.obj.label === label);
+      if (!comp) continue;
+      sideChainComponentRefs.push(comp.cell.transform.ref);
+      const color = colorByChain.get(chain);
+      if (color !== undefined) {
+        await viewer.plugin.managers.structure.component.updateRepresentationsTheme([comp], {
+          color: "uniform",
+          colorParams: { value: color },
+        });
+      }
+    }
   }
 
   async function clearSideChains() {
-    if (!sideChainComponentRef) return;
-    const ref = sideChainComponentRef;
-    sideChainComponentRef = null;
-    await viewer.plugin.build().delete(ref).commit();
+    if (!sideChainComponentRefs.length) return;
+    const refs = sideChainComponentRefs;
+    sideChainComponentRefs = [];
+    for (const ref of refs) {
+      await viewer.plugin.build().delete(ref).commit();
+    }
   }
 
   return { viewer, highlightResidues, clearHighlight, showSideChains, clearSideChains };
