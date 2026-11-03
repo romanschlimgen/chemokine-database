@@ -72,7 +72,7 @@ function fmtNum(v, unit) {
       <span><strong>Chemokine class:</strong> ${escapeHtml(pair.chemokine_class || "")} ${pair.chemokine_uniprot ? `(UniProt ${escapeHtml(pair.chemokine_uniprot)})` : ""}</span>
     </div>
 
-    <div class="grid-2 structure-contacts">
+    <div class="grid-2">
       <div class="panel">
         <h2>Structure model</h2>
         <div id="viewport"></div>
@@ -87,6 +87,12 @@ function fmtNum(v, unit) {
         <h2>Inter-chain contacts (&le; 4 &#8491;, computed from the model coordinates)</h2>
         <svg id="contactSvg" width="100%"></svg>
       </div>
+    </div>
+
+    <div class="download-row">
+      <a class="btn-download" href="data/structures/${encodeURIComponent(pair.structure_file)}" download="${escapeHtml(pair.structure_file)}">
+        &#8681; Download structure (${escapeHtml(pair.structure_file.split(".").pop().toUpperCase())})
+      </a>
     </div>
 
     <div class="panel">

@@ -80,9 +80,9 @@ nav.site-nav .nav-right a:hover { color: var(--accent); }
 .hero img { max-width: 500px; width: 90%; height: auto; }
 
 main {
-  max-width: 1100px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 24px 32px 64px;
+  padding: 24px 20px 64px;
 }
 
 main > h2.page-title {
@@ -187,15 +187,29 @@ a.pair-link:hover { text-decoration: underline; }
   gap: 20px;
 }
 
-/* Gives the contact diagram ~20% more width than an even split, since it
-   needs the extra room more than the structure viewer does. */
-.grid-2.structure-contacts {
-  grid-template-columns: 2fr 3fr;
+@media (max-width: 760px) {
+  .grid-2 { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 760px) {
-  .grid-2,
-  .grid-2.structure-contacts { grid-template-columns: 1fr; }
+.download-row {
+  margin: -4px 0 20px;
+}
+
+.btn-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: #ffffff;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.btn-download:hover {
+  opacity: 0.9;
 }
 
 #viewport {
