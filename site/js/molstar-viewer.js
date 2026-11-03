@@ -135,12 +135,11 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     return (cell.obj && cell.obj.data) || null;
   }
 
-  // residues: [{chain, resnum}, ...] — builds one combined loci (OR'd across
-  // residues) so a single hover event highlights every residue involved.
-  function buildResidueLoci(residues) {
-    const structure = getStructure();
-    if (!structure || !residues.length) return null;
-    const { MS, compile, QueryContext, StructureSelection } = queryMods;
+  // residues: [{chain, resnum}, ...] — builds one combined MolScript
+  // expression (OR'd across residues) shared by the hover-loci and
+  // side-chain-component paths below.
+  function buildResidueExpr(residues) {
+    const { MS } = queryMods;
     const tests = residues.map(({ chain, resnum }) =>
       MS.core.logic.and([
         MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chain]),
@@ -148,8 +147,14 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
       ])
     );
     const test = tests.length === 1 ? tests[0] : MS.core.logic.or(tests);
-    const expr = MS.struct.generator.atomGroups({ "residue-test": test });
-    const query = compile(expr);
+    return MS.struct.generator.atomGroups({ "residue-test": test });
+  }
+
+  function buildResidueLoci(residues) {
+    const structure = getStructure();
+    if (!structure || !residues.length) return null;
+    const { compile, QueryContext, StructureSelection } = queryMods;
+    const query = compile(buildResidueExpr(residues));
     const result = query(new QueryContext(structure));
     return StructureSelection.toLociWithSourceUnits(result);
   }
@@ -168,5 +173,34 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     viewer.plugin.managers.interactivity.lociHighlights.highlightOnly({ loci: queryMods.EmptyLoci });
   }
 
-  return { viewer, highlightResidues, clearHighlight };
+  // Adds a separate ball-and-stick component for the given residues (full
+  // side chains, not just the cartoon backbone), replacing whatever was
+  // there before. Tracked by its state-tree ref so it can be removed again
+  // without touching the base cartoon/coloring component.
+  let sideChainComponentRef = null;
+
+  async function showSideChains(residues) {
+    await clearSideChains();
+    if (!residues || !residues.length) return;
+    const structureRef = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+    if (!structureRef) return;
+    const { StructureSelectionQuery } = queryMods;
+    const query = new StructureSelectionQuery("Side chains", buildResidueExpr(residues));
+    await viewer.plugin.managers.structure.component.add(
+      { selection: query, options: { checkExisting: false, label: "Side chains" }, representation: "ball-and-stick" },
+      [structureRef]
+    );
+    const updated = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+    const comp = updated.components.find((c) => c.cell.obj && c.cell.obj.label === "Side chains");
+    sideChainComponentRef = comp ? comp.cell.transform.ref : null;
+  }
+
+  async function clearSideChains() {
+    if (!sideChainComponentRef) return;
+    const ref = sideChainComponentRef;
+    sideChainComponentRef = null;
+    await viewer.plugin.build().delete(ref).commit();
+  }
+
+  return { viewer, highlightResidues, clearHighlight, showSideChains, clearSideChains };
 }

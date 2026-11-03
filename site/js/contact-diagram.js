@@ -7,12 +7,18 @@
 // keep a ~350-residue chain readable; every residue still gets a tick mark
 // and is hoverable. Hovering an edge or a residue calls
 // options.onHover(residues) / options.onLeave() so the caller can mirror the
-// highlight onto the 3D structure viewer.
+// highlight onto the 3D structure viewer. Clicking an edge or a residue is
+// "sticky" — it stays emphasized after the mouse leaves, and calls
+// options.onClick(residues) / options.onClickClear() so the caller can show
+// full side chains for it (clicking the same thing again, or empty space,
+// clears the selection).
 function renderContactDiagram(svgSelector, data, labels, options) {
   const { receptorResidues, chemokineResidues, contacts } = data;
   const { receptor: receptorLabel, chemokine: chemokineLabel, receptorChain, chemokineChain } = labels;
   const onHover = (options && options.onHover) || (() => {});
   const onLeave = (options && options.onLeave) || (() => {});
+  const onClick = (options && options.onClick) || (() => {});
+  const onClickClear = (options && options.onClickClear) || (() => {});
 
   const svg = d3.select(svgSelector);
   svg.selectAll("*").remove();
@@ -74,6 +80,11 @@ function renderContactDiagram(svgSelector, data, labels, options) {
 
   const root = svg.append("g");
 
+  // Clicking empty space (not an edge or a residue) clears the selection.
+  // Edge/node click handlers call event.stopPropagation() so their own
+  // clicks don't immediately re-trigger this.
+  svg.on("click", () => clearSelection());
+
   // Thick group-arc outlines, one per chain, sitting just outside the
   // residue dots so they read as a distinct ring rather than crowding them.
   const groupArc = d3.arc().innerRadius(bandInner).outerRadius(bandOuter).cornerRadius(3);
@@ -124,6 +135,15 @@ function renderContactDiagram(svgSelector, data, labels, options) {
     .append("title")
     .text((c) => `${receptorLabel} ${c.receptor_resname}${c.receptor_resnum} — ${chemokineLabel} ${c.chemokine_resname}${c.chemokine_resnum} (${c.distance_angstrom} Å)`);
 
+  // Click selection is sticky: it stays applied after the mouse leaves
+  // (hover emphasis falls back to it, instead of to the unselected default,
+  // once the hover ends). selectedToken identifies *what* is selected (the
+  // clicked contact object itself for an edge, or a "R123"/"C45" key for a
+  // residue node) so a second click on the same thing toggles it off.
+  let selectedToken = null;
+  let selectedContacts = [];
+  let selectedKeys = new Set();
+
   function resetEmphasis() {
     contactPaths.attr("stroke-width", BASE_STROKE).attr("stroke-opacity", (c) => baseOpacity(c.distance_angstrom));
   }
@@ -133,6 +153,40 @@ function renderContactDiagram(svgSelector, data, labels, options) {
     contactPaths
       .attr("stroke-width", (c) => (matchSet.has(c) ? EMPHASIS_STROKE : BASE_STROKE))
       .attr("stroke-opacity", (c) => (matchSet.has(c) ? 0.95 : DIM_OPACITY));
+  }
+
+  // Re-applies whatever the mouse isn't currently overriding: the sticky
+  // selection if there is one, otherwise the plain default.
+  function showSelectionOrDefault() {
+    if (selectedToken !== null) {
+      emphasizeContacts(selectedContacts);
+      showLabels(selectedKeys);
+    } else {
+      resetEmphasis();
+      hideAllLabels();
+    }
+  }
+
+  function selectContacts(token, matchingContacts, keys, residues) {
+    if (selectedToken === token) {
+      clearSelection();
+      return;
+    }
+    selectedToken = token;
+    selectedContacts = matchingContacts;
+    selectedKeys = keys;
+    emphasizeContacts(matchingContacts);
+    showLabels(keys);
+    onClick(residues);
+  }
+
+  function clearSelection() {
+    selectedToken = null;
+    selectedContacts = [];
+    selectedKeys = new Set();
+    resetEmphasis();
+    hideAllLabels();
+    onClickClear();
   }
 
   function residuesForContacts(matching) {
@@ -160,9 +214,17 @@ function renderContactDiagram(svgSelector, data, labels, options) {
       onHover(residuesForContacts([c]));
     })
     .on("mouseleave", function () {
-      resetEmphasis();
-      hideAllLabels();
+      showSelectionOrDefault();
       onLeave();
+    })
+    .on("click", function (event, c) {
+      event.stopPropagation();
+      selectContacts(
+        c,
+        [c],
+        new Set([keyFor("R", c.receptor_resnum), keyFor("C", c.chemokine_resnum)]),
+        residuesForContacts([c])
+      );
     });
 
   function addGroup(groupClass, residues, angleFn, resnameMap, hasContactSet, chain, side, dotColor) {
@@ -177,26 +239,35 @@ function renderContactDiagram(svgSelector, data, labels, options) {
       .attr("fill", (d) => (hasContactSet.has(d.resnum) ? dotColor : "#c7ccd1"))
       .style("cursor", "pointer")
       .on("mouseenter", function (event, d) {
-        const matching = contacts.filter((c) =>
-          chain === receptorChain ? c.receptor_resnum === d.resnum : c.chemokine_resnum === d.resnum
-        );
+        const { matching, activeKeys, residues_ } = nodeSelection(d);
         emphasizeContacts(matching);
-        const activeKeys = new Set([keyFor(side, d.resnum)]);
-        matching.forEach((c) => {
-          activeKeys.add(keyFor("R", c.receptor_resnum));
-          activeKeys.add(keyFor("C", c.chemokine_resnum));
-        });
         showLabels(activeKeys);
-        const residues_ = matching.length ? residuesForContacts(matching) : [{ chain, resnum: d.resnum }];
         onHover(residues_);
       })
       .on("mouseleave", function () {
-        resetEmphasis();
-        hideAllLabels();
+        showSelectionOrDefault();
         onLeave();
+      })
+      .on("click", function (event, d) {
+        event.stopPropagation();
+        const { matching, activeKeys, residues_ } = nodeSelection(d);
+        selectContacts(keyFor(side, d.resnum), matching, activeKeys, residues_);
       })
       .append("title")
       .text((d) => `${resnameMap.get(d.resnum)}${d.resnum}`);
+
+    function nodeSelection(d) {
+      const matching = contacts.filter((c) =>
+        chain === receptorChain ? c.receptor_resnum === d.resnum : c.chemokine_resnum === d.resnum
+      );
+      const activeKeys = new Set([keyFor(side, d.resnum)]);
+      matching.forEach((c) => {
+        activeKeys.add(keyFor("R", c.receptor_resnum));
+        activeKeys.add(keyFor("C", c.chemokine_resnum));
+      });
+      const residues_ = matching.length ? residuesForContacts(matching) : [{ chain, resnum: d.resnum }];
+      return { matching, activeKeys, residues_ };
+    }
 
     g.selectAll("text")
       .data(residues)

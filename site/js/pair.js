@@ -79,7 +79,8 @@ function fmtNum(v, unit) {
         <div class="note">
           ${escapeHtml(pair.receptor_name)} = chain ${escapeHtml(pair.receptor_chain)},
           ${escapeHtml(pair.chemokine_name)} = chain ${escapeHtml(pair.chemokine_chain)}.
-          Hover the contact diagram to highlight residues here.
+          Hover the contact diagram to highlight residues here; click a contact or residue
+          to show its side chains (click again, or empty space, to clear).
         </div>
       </div>
 
@@ -129,6 +130,14 @@ function fmtNum(v, unit) {
       onLeave: async () => {
         const sv = await structureViewer;
         if (sv) sv.clearHighlight();
+      },
+      onClick: async (residues) => {
+        const sv = await structureViewer;
+        if (sv) sv.showSideChains(residues);
+      },
+      onClickClear: async () => {
+        const sv = await structureViewer;
+        if (sv) sv.clearSideChains();
       },
     }
   );
