@@ -133,6 +133,26 @@ function fmtNum(v, unit) {
     }
   );
 
+  growStructurePanelToMatchContacts();
+
+  // The circular diagram is already cropped tightly to its own content, but
+  // its panel can still end up a bit taller than the structure panel next
+  // to it (different header/content shapes). Grow the Mol* viewport to make
+  // up the difference rather than cropping the diagram further — the
+  // diagram's own margins are already tight against its label content, so
+  // trimming more risks clipping the outer ring itself.
+  function growStructurePanelToMatchContacts() {
+    const panels = document.querySelectorAll(".grid-2 .panel");
+    const viewportEl = document.getElementById("viewport");
+    if (panels.length < 2 || !viewportEl) return;
+    const structureHeight = panels[0].getBoundingClientRect().height;
+    const contactsHeight = panels[1].getBoundingClientRect().height;
+    const extra = contactsHeight - structureHeight;
+    if (extra <= 0) return;
+    const currentViewportHeight = viewportEl.getBoundingClientRect().height;
+    viewportEl.style.height = `${currentViewportHeight + extra}px`;
+  }
+
   function renderBinding(rows) {
     if (!rows.length) {
       return '<p class="pending">No binding data yet.</p>';
