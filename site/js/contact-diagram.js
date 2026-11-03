@@ -231,4 +231,17 @@ function renderContactDiagram(svgSelector, data, labels, options) {
 
   root.append("text").attr("x", rlx).attr("y", rly).attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 700).attr("fill", "#1d4e89").text(receptorLabel);
   root.append("text").attr("x", clx).attr("y", cly).attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 700).attr("fill", "#3a6d9e").text(chemokineLabel);
+
+  // The circle's horizontal extent is sized to fill the panel's width, but
+  // nothing stops it from being much shorter than it is wide (the group
+  // labels sit beside the arcs, not above/below them). getBBox() still
+  // measures hidden (opacity: 0) hover labels, so this crops the viewBox
+  // tightly to whatever vertical space the content can actually reach,
+  // instead of carrying the same margin as the width on every side.
+  const pad = 6;
+  const bbox = root.node().getBBox();
+  const cropTop = Math.max(0, bbox.y - pad);
+  const cropBottom = Math.min(size, bbox.y + bbox.height + pad);
+  const croppedHeight = cropBottom - cropTop;
+  svg.attr("height", croppedHeight).attr("viewBox", `0 ${cropTop} ${size} ${croppedHeight}`);
 }
