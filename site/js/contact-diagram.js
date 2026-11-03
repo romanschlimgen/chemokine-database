@@ -2,11 +2,12 @@
 // position around the circle (grouped into a receptor arc and a chemokine
 // arc, sized proportionally to each chain's length), and real inter-chain
 // contacts (computed from structure coordinates in build_db.py, not
-// placeholder data) are drawn as curves through the center. Only residues
-// with at least one contact are labeled, to keep a ~350-residue chain
-// readable; every residue still gets a tick mark and is hoverable. Hovering
-// an edge or a residue calls options.onHover(residues) / options.onLeave()
-// so the caller can mirror the highlight onto the 3D structure viewer.
+// placeholder data) are drawn as curves through the center. Residue labels
+// are hidden by default and only shown for whatever's under the cursor, to
+// keep a ~350-residue chain readable; every residue still gets a tick mark
+// and is hoverable. Hovering an edge or a residue calls
+// options.onHover(residues) / options.onLeave() so the caller can mirror the
+// highlight onto the 3D structure viewer.
 function renderContactDiagram(svgSelector, data, labels, options) {
   const { receptorResidues, chemokineResidues, contacts } = data;
   const { receptor: receptorLabel, chemokine: chemokineLabel, receptorChain, chemokineChain } = labels;
@@ -21,15 +22,17 @@ function renderContactDiagram(svgSelector, data, labels, options) {
     return;
   }
 
-  const size = Math.max(svg.node().clientWidth || 600, 420);
+  const size = Math.max(svg.node().clientWidth || 600, 500);
   const height = size;
   svg.attr("height", height).attr("viewBox", `0 0 ${size} ${height}`);
 
   const cx = size / 2;
   const cy = height / 2;
-  const outerRadius = Math.min(size, height) / 2 - 90;
+  const outerRadius = Math.min(size, height) / 2 - 100;
   const tickRadius = outerRadius;
-  const labelRadius = outerRadius + 8;
+  const bandInner = tickRadius + 6;
+  const bandOuter = tickRadius + 14;
+  const labelRadius = bandOuter + 10;
 
   const GAP_DEG = 6;
   const total = receptorResidues.length + chemokineResidues.length;
@@ -66,8 +69,39 @@ function renderContactDiagram(svgSelector, data, labels, options) {
   const baseOpacity = d3.scaleLinear().domain([minDist, maxDist]).range([0.8, 0.12]).clamp(true);
   const DIM_OPACITY = 0.04;
   const edgeColor = "#1d4e89";
+  const BASE_STROKE = 1.6;
+  const EMPHASIS_STROKE = 3.2;
 
   const root = svg.append("g");
+
+  // Thick group-arc outlines, one per chain, sitting just outside the
+  // residue dots so they read as a distinct ring rather than crowding them.
+  const groupArc = d3.arc().innerRadius(bandInner).outerRadius(bandOuter).cornerRadius(3);
+  root
+    .append("path")
+    .attr("d", groupArc({ startAngle: (receptorStart * Math.PI) / 180, endAngle: (receptorEnd * Math.PI) / 180 }))
+    .attr("transform", `translate(${cx},${cy})`)
+    .attr("fill", "#1d4e89")
+    .attr("opacity", 0.9);
+  root
+    .append("path")
+    .attr("d", groupArc({ startAngle: (chemokineStart * Math.PI) / 180, endAngle: (chemokineEnd * Math.PI) / 180 }))
+    .attr("transform", `translate(${cx},${cy})`)
+    .attr("fill", "#7fb3e0")
+    .attr("opacity", 0.9);
+
+  // Labels: created once, hidden by default, shown only for whatever's
+  // currently hovered (a residue, or the two residues of a hovered edge).
+  const labelByKey = new Map();
+  function keyFor(side, resnum) {
+    return `${side}${resnum}`;
+  }
+  function showLabels(keys) {
+    for (const [key, el] of labelByKey) el.attr("opacity", keys.has(key) ? 1 : 0);
+  }
+  function hideAllLabels() {
+    for (const [, el] of labelByKey) el.attr("opacity", 0);
+  }
 
   // Contact curves, through a control point pulled toward the center.
   const contactPaths = root
@@ -82,7 +116,7 @@ function renderContactDiagram(svgSelector, data, labels, options) {
     })
     .attr("fill", "none")
     .attr("stroke", edgeColor)
-    .attr("stroke-width", 1)
+    .attr("stroke-width", BASE_STROKE)
     .attr("stroke-opacity", (c) => baseOpacity(c.distance_angstrom))
     .style("cursor", "pointer");
 
@@ -91,13 +125,13 @@ function renderContactDiagram(svgSelector, data, labels, options) {
     .text((c) => `${receptorLabel} ${c.receptor_resname}${c.receptor_resnum} — ${chemokineLabel} ${c.chemokine_resname}${c.chemokine_resnum} (${c.distance_angstrom} Å)`);
 
   function resetEmphasis() {
-    contactPaths.attr("stroke-width", 1).attr("stroke-opacity", (c) => baseOpacity(c.distance_angstrom));
+    contactPaths.attr("stroke-width", BASE_STROKE).attr("stroke-opacity", (c) => baseOpacity(c.distance_angstrom));
   }
 
   function emphasizeContacts(matching) {
     const matchSet = new Set(matching);
     contactPaths
-      .attr("stroke-width", (c) => (matchSet.has(c) ? 2 : 1))
+      .attr("stroke-width", (c) => (matchSet.has(c) ? EMPHASIS_STROKE : BASE_STROKE))
       .attr("stroke-opacity", (c) => (matchSet.has(c) ? 0.95 : DIM_OPACITY));
   }
 
@@ -105,8 +139,8 @@ function renderContactDiagram(svgSelector, data, labels, options) {
     const residues = [];
     const seen = new Set();
     for (const c of matching) {
-      const rKey = `R${c.receptor_resnum}`;
-      const cKey = `C${c.chemokine_resnum}`;
+      const rKey = keyFor("R", c.receptor_resnum);
+      const cKey = keyFor("C", c.chemokine_resnum);
       if (!seen.has(rKey)) {
         seen.add(rKey);
         residues.push({ chain: receptorChain, resnum: c.receptor_resnum });
@@ -122,14 +156,16 @@ function renderContactDiagram(svgSelector, data, labels, options) {
   contactPaths
     .on("mouseenter", function (event, c) {
       emphasizeContacts([c]);
+      showLabels(new Set([keyFor("R", c.receptor_resnum), keyFor("C", c.chemokine_resnum)]));
       onHover(residuesForContacts([c]));
     })
     .on("mouseleave", function () {
       resetEmphasis();
+      hideAllLabels();
       onLeave();
     });
 
-  function addGroup(groupClass, residues, angleFn, resnameMap, hasContactSet, chain, dotColor) {
+  function addGroup(groupClass, residues, angleFn, resnameMap, hasContactSet, chain, side, dotColor) {
     const g = root.append("g").attr("class", `group-${groupClass}`);
 
     g.selectAll("circle")
@@ -137,7 +173,7 @@ function renderContactDiagram(svgSelector, data, labels, options) {
       .join("circle")
       .attr("cx", (d) => pointFor(angleFn(d.resnum), tickRadius)[0])
       .attr("cy", (d) => pointFor(angleFn(d.resnum), tickRadius)[1])
-      .attr("r", (d) => (hasContactSet.has(d.resnum) ? 2.6 : 1.3))
+      .attr("r", (d) => (hasContactSet.has(d.resnum) ? 2.8 : 1.4))
       .attr("fill", (d) => (hasContactSet.has(d.resnum) ? dotColor : "#c7ccd1"))
       .style("cursor", "pointer")
       .on("mouseenter", function (event, d) {
@@ -145,18 +181,25 @@ function renderContactDiagram(svgSelector, data, labels, options) {
           chain === receptorChain ? c.receptor_resnum === d.resnum : c.chemokine_resnum === d.resnum
         );
         emphasizeContacts(matching);
+        const activeKeys = new Set([keyFor(side, d.resnum)]);
+        matching.forEach((c) => {
+          activeKeys.add(keyFor("R", c.receptor_resnum));
+          activeKeys.add(keyFor("C", c.chemokine_resnum));
+        });
+        showLabels(activeKeys);
         const residues_ = matching.length ? residuesForContacts(matching) : [{ chain, resnum: d.resnum }];
         onHover(residues_);
       })
       .on("mouseleave", function () {
         resetEmphasis();
+        hideAllLabels();
         onLeave();
       })
       .append("title")
       .text((d) => `${resnameMap.get(d.resnum)}${d.resnum}`);
 
     g.selectAll("text")
-      .data(residues.filter((d) => hasContactSet.has(d.resnum)))
+      .data(residues)
       .join("text")
       .each(function (d) {
         const angleDeg = angleFn(d.resnum);
@@ -167,14 +210,18 @@ function renderContactDiagram(svgSelector, data, labels, options) {
           .attr("y", y)
           .attr("text-anchor", flip ? "end" : "start")
           .attr("transform", `rotate(${flip ? angleDeg + 180 : angleDeg}, ${x}, ${y})`)
-          .attr("font-size", 9)
-          .attr("fill", "var(--text-dim)")
+          .attr("font-size", 10)
+          .attr("font-weight", 600)
+          .attr("fill", "var(--text)")
+          .attr("opacity", 0)
+          .style("pointer-events", "none")
           .text(`${resnameMap.get(d.resnum)}${d.resnum}`);
+        labelByKey.set(keyFor(side, d.resnum), d3.select(this));
       });
   }
 
-  addGroup("receptor", receptorResidues, receptorAngle, receptorResnameByNum, receptorHasContact, receptorChain, "#1d4e89");
-  addGroup("chemokine", chemokineResidues, chemokineAngle, chemokineResnameByNum, chemokineHasContact, chemokineChain, "#7fb3e0");
+  addGroup("receptor", receptorResidues, receptorAngle, receptorResnameByNum, receptorHasContact, receptorChain, "R", "#1d4e89");
+  addGroup("chemokine", chemokineResidues, chemokineAngle, chemokineResnameByNum, chemokineHasContact, chemokineChain, "C", "#7fb3e0");
 
   // Group labels, centered over each arc.
   const receptorMid = (receptorStart + receptorEnd) / 2;

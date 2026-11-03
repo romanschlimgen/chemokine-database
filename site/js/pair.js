@@ -72,7 +72,7 @@ function fmtNum(v, unit) {
       <span><strong>Chemokine class:</strong> ${escapeHtml(pair.chemokine_class || "")} ${pair.chemokine_uniprot ? `(UniProt ${escapeHtml(pair.chemokine_uniprot)})` : ""}</span>
     </div>
 
-    <div class="grid-2">
+    <div class="grid-2 structure-contacts">
       <div class="panel">
         <h2>Structure model</h2>
         <div id="viewport"></div>

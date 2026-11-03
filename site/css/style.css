@@ -187,8 +187,15 @@ a.pair-link:hover { text-decoration: underline; }
   gap: 20px;
 }
 
+/* Gives the contact diagram ~20% more width than an even split, since it
+   needs the extra room more than the structure viewer does. */
+.grid-2.structure-contacts {
+  grid-template-columns: 2fr 3fr;
+}
+
 @media (max-width: 760px) {
-  .grid-2 { grid-template-columns: 1fr; }
+  .grid-2,
+  .grid-2.structure-contacts { grid-template-columns: 1fr; }
 }
 
 #viewport {
