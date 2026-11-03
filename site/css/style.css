@@ -192,9 +192,11 @@ a.pair-link:hover { text-decoration: underline; }
 }
 
 #viewport {
+  position: relative;
   width: 100%;
   height: 420px;
   border-radius: 6px;
+  overflow: hidden;
   background: #ffffff;
 }
 

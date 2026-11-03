@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Pair detail — Chemokine–Chemokine Receptor Database</title>
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/molstar@4.1.0/build/viewer/molstar.css" />
 </head>
 <body>
   <nav class="site-nav">
@@ -26,10 +27,11 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/sql.js@1.15.2/dist/sql-wasm.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ngl@2.0.2/dist/ngl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/molstar@4.1.0/build/viewer/molstar.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.1/dist/d3.min.js"></script>
   <script src="js/db.js"></script>
+  <script type="module" src="js/molstar-viewer.js"></script>
   <script src="js/contact-diagram.js"></script>
-  <script src="js/pair.js"></script>
+  <script type="module" src="js/pair.js"></script>
 </body>
 </html>

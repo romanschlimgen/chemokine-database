@@ -1,3 +1,5 @@
+import { createStructureViewer } from "./molstar-viewer.js";
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -60,8 +62,9 @@ function fmtNum(v, unit) {
         <h2>Structure model</h2>
         <div id="viewport"></div>
         <div class="note">
-          <span class="legend-item"><span class="legend-swatch" style="background:grey"></span>${escapeHtml(pair.receptor_name)} (chain ${escapeHtml(pair.receptor_chain)})</span>
-          <span class="legend-item"><span class="legend-swatch" style="background:royalblue"></span>${escapeHtml(pair.chemokine_name)} (chain ${escapeHtml(pair.chemokine_chain)})</span>
+          ${escapeHtml(pair.receptor_name)} = chain ${escapeHtml(pair.receptor_chain)},
+          ${escapeHtml(pair.chemokine_name)} = chain ${escapeHtml(pair.chemokine_chain)}.
+          Hover the contact diagram below to highlight residues here.
         </div>
       </div>
 
@@ -78,22 +81,35 @@ function fmtNum(v, unit) {
     </div>
   `;
 
-  // Structure viewer
-  const stage = new NGL.Stage("viewport", { backgroundColor: "white" });
-  window.addEventListener("resize", () => stage.handleResize());
-  stage
-    .loadFile(`data/structures/${pair.structure_file}`, { ext: "pdb" })
-    .then((component) => {
-      component.addRepresentation("tube", { sele: `:${pair.receptor_chain}`, color: "grey" });
-      component.addRepresentation("cartoon", { sele: `:${pair.chemokine_chain}`, color: "royalblue" });
-      component.autoView();
-      stage.setSpin(true);
-    });
+  // Structure viewer (Mol*)
+  const structureViewer = createStructureViewer("viewport", `data/structures/${pair.structure_file}`).catch(
+    (err) => {
+      document.getElementById("viewport").innerHTML =
+        `<div class="loading">Could not load the structure viewer: ${escapeHtml(err.message)}</div>`;
+      return null;
+    }
+  );
 
-  renderContactDiagram("#contactSvg", contacts, {
-    receptor: pair.receptor_name,
-    chemokine: pair.chemokine_name,
-  });
+  renderContactDiagram(
+    "#contactSvg",
+    contacts,
+    {
+      receptor: pair.receptor_name,
+      chemokine: pair.chemokine_name,
+      receptorChain: pair.receptor_chain,
+      chemokineChain: pair.chemokine_chain,
+    },
+    {
+      onHover: async (residues) => {
+        const sv = await structureViewer;
+        if (sv) sv.highlightResidues(residues);
+      },
+      onLeave: async () => {
+        const sv = await structureViewer;
+        if (sv) sv.clearHighlight();
+      },
+    }
+  );
 
   function renderBinding(rows) {
     if (!rows.length) {

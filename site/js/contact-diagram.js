@@ -1,10 +1,13 @@
 // Renders a two-column "bipartite" contact diagram from real inter-chain
 // residue contacts (computed from structure coordinates in build_db.py — not
 // placeholder data). Each curve is an actual contact; curve opacity scales
-// with how close the contact is.
-function renderContactDiagram(svgSelector, contacts, labels) {
-  const receptorLabel = labels.receptor;
-  const chemokineLabel = labels.chemokine;
+// with how close the contact is. Hovering an edge or a residue node calls
+// options.onHover(residues) / options.onLeave() so the caller can mirror the
+// highlight onto the 3D structure viewer.
+function renderContactDiagram(svgSelector, contacts, labels, options) {
+  const { receptor: receptorLabel, chemokine: chemokineLabel, receptorChain, chemokineChain } = labels;
+  const onHover = (options && options.onHover) || (() => {});
+  const onLeave = (options && options.onLeave) || (() => {});
 
   const svg = d3.select(svgSelector);
   svg.selectAll("*").remove();
@@ -32,10 +35,7 @@ function renderContactDiagram(svgSelector, contacts, labels) {
   const xLeft = 110;
   const xRight = width - 110;
 
-  const yFor = (list) => {
-    const scale = d3.scalePoint().domain(list).range([margin.top, height - margin.bottom]);
-    return scale;
-  };
+  const yFor = (list) => d3.scalePoint().domain(list).range([margin.top, height - margin.bottom]);
   const yLeft = yFor(receptorResidues);
   const yRight = yFor(chemokineResidues);
 
@@ -44,24 +44,20 @@ function renderContactDiagram(svgSelector, contacts, labels) {
 
   const maxDist = d3.max(contacts, (c) => c.distance_angstrom);
   const minDist = d3.min(contacts, (c) => c.distance_angstrom);
-  const opacity = d3
-    .scaleLinear()
-    .domain([minDist, maxDist])
-    .range([0.85, 0.15])
-    .clamp(true);
+  const baseOpacity = d3.scaleLinear().domain([minDist, maxDist]).range([0.85, 0.15]).clamp(true);
 
   const color = "#1d4e89";
+  const DIM_OPACITY = 0.06;
 
-  const link = d3
-    .linkHorizontal()
-    .x((d) => d.x)
-    .y((d) => d.y);
+  const link = d3.linkHorizontal().x((d) => d.x).y((d) => d.y);
 
-  svg
+  const contactPaths = svg
     .selectAll("path.contact")
     .data(contacts)
     .join("path")
     .attr("class", "contact")
+    .attr("data-receptor", (c) => c.receptor_resnum)
+    .attr("data-chemokine", (c) => c.chemokine_resnum)
     .attr("d", (c) =>
       link({
         source: { x: xLeft + 6, y: yLeft(c.receptor_resnum) },
@@ -71,53 +67,93 @@ function renderContactDiagram(svgSelector, contacts, labels) {
     .attr("fill", "none")
     .attr("stroke", color)
     .attr("stroke-width", 1.2)
-    .attr("stroke-opacity", (c) => opacity(c.distance_angstrom))
+    .attr("stroke-opacity", (c) => baseOpacity(c.distance_angstrom))
+    .style("cursor", "pointer");
+
+  contactPaths
     .append("title")
     .text((c) => `${receptorLabel} ${c.receptor_resname}${c.receptor_resnum} — ${chemokineLabel} ${c.chemokine_resname}${c.chemokine_resnum} (${c.distance_angstrom} Å)`);
 
-  svg
-    .selectAll("circle.left")
-    .data(receptorResidues)
-    .join("circle")
-    .attr("class", "left")
-    .attr("cx", xLeft)
-    .attr("cy", (d) => yLeft(d))
-    .attr("r", 3)
-    .attr("fill", "#1d4e89");
+  function resetEmphasis() {
+    contactPaths.attr("stroke-width", 1.2).attr("stroke-opacity", (c) => baseOpacity(c.distance_angstrom));
+    svg.selectAll("circle.left,circle.right").attr("opacity", 1);
+  }
 
-  svg
-    .selectAll("text.left-label")
-    .data(receptorResidues)
-    .join("text")
-    .attr("class", "left-label")
-    .attr("x", xLeft - 10)
-    .attr("y", (d) => yLeft(d) + 3)
-    .attr("text-anchor", "end")
-    .attr("font-size", 10)
-    .attr("fill", "var(--text-dim)")
-    .text((d) => `${resnameByReceptor.get(d)}${d}`);
+  function emphasizeContacts(matching) {
+    const matchSet = new Set(matching);
+    contactPaths
+      .attr("stroke-width", (c) => (matchSet.has(c) ? 2.5 : 1.2))
+      .attr("stroke-opacity", (c) => (matchSet.has(c) ? 0.95 : DIM_OPACITY));
+  }
 
-  svg
-    .selectAll("circle.right")
-    .data(chemokineResidues)
-    .join("circle")
-    .attr("class", "right")
-    .attr("cx", xRight)
-    .attr("cy", (d) => yRight(d))
-    .attr("r", 3)
-    .attr("fill", "#7fb3e0");
+  function residuesForContacts(matching) {
+    const residues = [];
+    const seen = new Set();
+    for (const c of matching) {
+      const rKey = `R${c.receptor_resnum}`;
+      const cKey = `C${c.chemokine_resnum}`;
+      if (!seen.has(rKey)) {
+        seen.add(rKey);
+        residues.push({ chain: receptorChain, resnum: c.receptor_resnum });
+      }
+      if (!seen.has(cKey)) {
+        seen.add(cKey);
+        residues.push({ chain: chemokineChain, resnum: c.chemokine_resnum });
+      }
+    }
+    return residues;
+  }
 
-  svg
-    .selectAll("text.right-label")
-    .data(chemokineResidues)
-    .join("text")
-    .attr("class", "right-label")
-    .attr("x", xRight + 10)
-    .attr("y", (d) => yRight(d) + 3)
-    .attr("text-anchor", "start")
-    .attr("font-size", 10)
-    .attr("fill", "var(--text-dim)")
-    .text((d) => `${resnameByChemokine.get(d)}${d}`);
+  contactPaths
+    .on("mouseenter", function (event, c) {
+      emphasizeContacts([c]);
+      onHover(residuesForContacts([c]));
+    })
+    .on("mouseleave", function () {
+      resetEmphasis();
+      onLeave();
+    });
+
+  function addNodes(className, residues, x, resnameMap, anchor, labelDx, side) {
+    const circles = svg
+      .selectAll(`circle.${className}`)
+      .data(residues)
+      .join("circle")
+      .attr("class", className)
+      .attr("cx", x)
+      .attr("cy", (d) => (side === "left" ? yLeft(d) : yRight(d)))
+      .attr("r", 3)
+      .attr("fill", side === "left" ? "#1d4e89" : "#7fb3e0")
+      .style("cursor", "pointer");
+
+    circles
+      .on("mouseenter", function (event, resnum) {
+        const matching = contacts.filter((c) =>
+          side === "left" ? c.receptor_resnum === resnum : c.chemokine_resnum === resnum
+        );
+        emphasizeContacts(matching);
+        onHover(residuesForContacts(matching));
+      })
+      .on("mouseleave", function () {
+        resetEmphasis();
+        onLeave();
+      });
+
+    svg
+      .selectAll(`text.${className}-label`)
+      .data(residues)
+      .join("text")
+      .attr("class", `${className}-label`)
+      .attr("x", x + labelDx)
+      .attr("y", (d) => (side === "left" ? yLeft(d) : yRight(d)) + 3)
+      .attr("text-anchor", anchor)
+      .attr("font-size", 10)
+      .attr("fill", "var(--text-dim)")
+      .text((d) => `${resnameMap.get(d)}${d}`);
+  }
+
+  addNodes("left", receptorResidues, xLeft, resnameByReceptor, "end", -10, "left");
+  addNodes("right", chemokineResidues, xRight, resnameByChemokine, "start", 10, "right");
 
   svg
     .append("text")
