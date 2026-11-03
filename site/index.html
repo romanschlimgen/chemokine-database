@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chemokine–Chemokine Receptor Database</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>Chemokine–Chemokine Receptor Database</h1>
+    <div class="subtitle">
+      Data accompanying <em>Validation and Discovery of Chemokine–Chemokine Receptor Pairs
+      with High-Throughput Protein Modeling</em> — Schlimgen, Kim, Zimmerman, Jensen, Peterson,
+      Szpakowska, Chevigné, Volkman
+    </div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Search by receptor or chemokine name…" />
+      <select id="pairTypeFilter">
+        <option value="">All pair types</option>
+      </select>
+    </div>
+
+    <div id="tableContainer">
+      <div class="loading">Loading database…</div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/sql.js@1.15.2/dist/sql-wasm.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/table.js"></script>
+</body>
+</html>

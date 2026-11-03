@@ -1,0 +1,2 @@
+binding_id,pair_id,assay_type,kd_nm,ic50_nm,n_replicates,analysis_method,raw_data_file,legacy_figure,notes
+CXCR4_CXCL12_legacy,CXCR4_CXCL12,,,,,,,CXCR4.png,Numeric values pending reanalysis. The original site only showed a static figure (CXCR4.png) with no extracted numbers, so none are fabricated here.
