@@ -28,11 +28,11 @@ function renderContactDiagram(svgSelector, data, labels, options) {
 
   const cx = size / 2;
   const cy = height / 2;
-  const outerRadius = Math.min(size, height) / 2 - 100;
+  const outerRadius = Math.min(size, height) / 2 - 70;
   const tickRadius = outerRadius;
-  const bandInner = tickRadius + 6;
-  const bandOuter = tickRadius + 14;
-  const labelRadius = bandOuter + 10;
+  const bandInner = tickRadius + 5;
+  const bandOuter = tickRadius + 12;
+  const labelRadius = bandOuter + 8;
 
   const GAP_DEG = 6;
   const total = receptorResidues.length + chemokineResidues.length;
@@ -226,8 +226,8 @@ function renderContactDiagram(svgSelector, data, labels, options) {
   // Group labels, centered over each arc.
   const receptorMid = (receptorStart + receptorEnd) / 2;
   const chemokineMid = (chemokineStart + chemokineEnd) / 2;
-  const [rlx, rly] = pointFor(receptorMid, outerRadius + 42);
-  const [clx, cly] = pointFor(chemokineMid, outerRadius + 42);
+  const [rlx, rly] = pointFor(receptorMid, outerRadius + 32);
+  const [clx, cly] = pointFor(chemokineMid, outerRadius + 32);
 
   root.append("text").attr("x", rlx).attr("y", rly).attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 700).attr("fill", "#1d4e89").text(receptorLabel);
   root.append("text").attr("x", clx).attr("y", cly).attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 700).attr("fill", "#3a6d9e").text(chemokineLabel);
