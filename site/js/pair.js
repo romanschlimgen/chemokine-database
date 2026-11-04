@@ -191,10 +191,7 @@ function fmtNum(v, unit) {
       },
       onClickClear: async () => {
         const sv = await structureViewer;
-        if (sv) {
-          sv.clearSideChains();
-          sv.clearFocus();
-        }
+        if (sv) sv.clearSideChains();
       },
     }
   );

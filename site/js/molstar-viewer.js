@@ -260,18 +260,18 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     }
   }
 
-  // Mirrors what clicking directly on the model already does (zoom in and
-  // highlight the surrounding interactions), but driven from the contact
-  // diagram's click instead of Mol*'s own picking.
+  // Zooms the camera in on exactly the clicked residues. Deliberately does
+  // NOT use plugin.managers.structure.focus.setFromLoci() — that's Mol*'s
+  // own "click on the model" behavior, but it auto-adds a "Surroundings
+  // (5 Å)" component pulling in every residue within 5 Å (not just the ones
+  // actually in contact) and themed with Mol*'s own default chain-id
+  // rainbow coloring, not ours. showSideChains above already shows exactly
+  // the right residues in the right colors, so this only needs to move the
+  // camera.
   function focusResidues(residues) {
     const loci = buildResidueLoci(residues);
     if (!loci || !loci.elements || !loci.elements.length) return;
-    viewer.plugin.managers.structure.focus.setFromLoci(loci);
     viewer.plugin.managers.camera.focusLoci(loci);
-  }
-
-  function clearFocus() {
-    viewer.plugin.managers.structure.focus.clear();
   }
 
   // Clicking directly on the 3D model (Mol*'s own built-in picking
@@ -283,5 +283,5 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     applySideChainColors();
   });
 
-  return { viewer, highlightResidues, clearHighlight, showSideChains, clearSideChains, focusResidues, clearFocus };
+  return { viewer, highlightResidues, clearHighlight, showSideChains, clearSideChains, focusResidues };
 }
