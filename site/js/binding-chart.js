@@ -37,7 +37,7 @@ function renderBindingChart(svgSelector, series) {
 
   // A fixed, compact width rather than stretching to fill the panel —
   // matches the manuscript's own small multiples.
-  const width = 340;
+  const width = 420;
   const height = 260;
   const margin = { top: 18, right: 20, bottom: 44, left: 50 };
   // Gap between the two axis lines and the plot content, matching the
