@@ -109,6 +109,32 @@ function renderBindingChart(svgSelector, series) {
     .attr("fill", "var(--text)")
     .text("BRET Ratio");
 
+  // Same spot used for the always-on current-series label below, so a
+  // hovered context curve's label lands exactly where that curve's own
+  // label would sit if it were the current one.
+  function labelPosition(sc) {
+    const s = sc.series;
+    const labelConc = Math.pow(10, Math.log10(lo) + (Math.log10(hi) - Math.log10(lo)) * 0.1);
+    const labelY = s.fit ? logistic3pl(labelConc, s.fit.bottom, s.fit.top, s.fit.kd_nm) : d3.mean(s.points, (p) => p.bret);
+    return {
+      x: margin.left + (width - margin.left - margin.right) * 0.1,
+      y: Math.max(margin.top + 10, y(labelY) - 10),
+    };
+  }
+
+  // Shared label shown instantly on hovering a context curve — a native
+  // <title> tooltip has the browser's own show delay and styling, so this
+  // draws a plain grey text label instead, matching the current series'
+  // always-on blue one.
+  const hoverLabel = svg
+    .append("text")
+    .attr("text-anchor", "start")
+    .attr("font-size", 12)
+    .attr("font-weight", 700)
+    .attr("fill", OTHER_COLOR)
+    .style("pointer-events", "none")
+    .style("display", "none");
+
   function drawSeries(sc) {
     const s = sc.series;
     const color = s.isCurrent ? ACCENT_COLOR : OTHER_COLOR;
@@ -122,10 +148,17 @@ function renderBindingChart(svgSelector, series) {
     // chemokine, clicking jumps to its own pair page.
     const isLinked = !s.isCurrent && s.pairId;
     if (isLinked) {
-      g.style("cursor", "pointer").on("click", () => {
-        location.href = `pair.html?pair=${encodeURIComponent(s.pairId)}`;
-      });
-      g.append("title").text(`${s.chemokineLabel} — click to view this pair`);
+      g.style("cursor", "pointer")
+        .on("click", () => {
+          location.href = `pair.html?pair=${encodeURIComponent(s.pairId)}`;
+        })
+        .on("mouseenter", () => {
+          const pos = labelPosition(sc);
+          hoverLabel.attr("x", pos.x).attr("y", pos.y).text(s.chemokineLabel).style("display", null).raise();
+        })
+        .on("mouseleave", () => {
+          hoverLabel.style("display", "none");
+        });
       // A fat invisible stroke widens the hover/click target beyond the
       // thin visible line, without changing how the curve looks.
       g.append("path")
@@ -163,16 +196,12 @@ function renderBindingChart(svgSelector, series) {
 
   // Single direct label for the highlighted curve, on the left side of the
   // chart (in its open low-concentration region) rather than a legend box.
-  if (current) {
-    const labelX = margin.left + (width - margin.left - margin.right) * 0.1;
-    const labelConc = Math.pow(10, Math.log10(lo) + (Math.log10(hi) - Math.log10(lo)) * 0.1);
-    const labelY = current.fit
-      ? logistic3pl(labelConc, current.fit.bottom, current.fit.top, current.fit.kd_nm)
-      : d3.mean(current.points, (p) => p.bret);
+  if (currentCurve) {
+    const pos = labelPosition(currentCurve);
     svg
       .append("text")
-      .attr("x", labelX)
-      .attr("y", Math.max(margin.top + 10, y(labelY) - 10))
+      .attr("x", pos.x)
+      .attr("y", pos.y)
       .attr("text-anchor", "start")
       .attr("font-size", 12)
       .attr("font-weight", 700)
