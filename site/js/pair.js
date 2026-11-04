@@ -78,6 +78,7 @@ function fmtNum(v, unit) {
       const rpBinding = queryAll(db, "SELECT * FROM binding WHERE pair_id = ?", [rp.pair_id]);
       const fitRow = rpBinding.find((r) => r.fit_top !== null && r.fit_top !== undefined);
       return {
+        pairId: rp.pair_id,
         chemokineLabel: tracerLabel(rpBinding, rp.chemokine_name),
         points,
         fit: fitRow ? { bottom: fitRow.fit_bottom, top: fitRow.fit_top, kd_nm: fitRow.kd_nm } : null,

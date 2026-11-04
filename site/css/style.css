@@ -226,7 +226,13 @@ a.pair-link:hover { text-decoration: underline; }
 .legend-swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
 
 .binding-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
-.binding-row svg { flex: 0 0 auto; }
+/* The chart's internal coordinate system (its viewBox) is a fixed 420x260,
+   but its rendered size is fluid — width:100% of whatever this flexes down
+   to, capped so it doesn't balloon in a very wide panel, with height
+   following from the viewBox's aspect ratio. A hardcoded pixel width here
+   previously overflowed or looked cramped depending on the browser's own
+   width. */
+.binding-row svg { flex: 1 1 360px; width: 100%; min-width: 260px; max-width: 440px; height: auto; }
 .assay-schematic { flex: 0 1 300px; max-width: 300px; height: auto; }
 .note { color: var(--text-dim); font-size: 13px; margin-top: 8px; }
 

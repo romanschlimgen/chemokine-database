@@ -35,15 +35,18 @@ function renderBindingChart(svgSelector, series) {
 
   const current = series.find((s) => s.isCurrent) || series[0];
 
-  // A fixed, compact width rather than stretching to fill the panel —
-  // matches the manuscript's own small multiples.
+  // A fixed internal coordinate system (not a fixed pixel size) — the
+  // viewBox lets the SVG scale fluidly to whatever width CSS gives it
+  // (site/css/style.css caps/floors that), instead of a hardcoded pixel
+  // width that overflowed or looked cramped depending on the browser's
+  // actual width.
   const width = 420;
   const height = 260;
   const margin = { top: 18, right: 20, bottom: 44, left: 50 };
   // Gap between the two axis lines and the plot content, matching the
   // manuscript's detached-spine style (seaborn/ggplot "offset axes").
   const axisOffset = 7;
-  svg.attr("width", width).attr("height", height).attr("viewBox", `0 0 ${width} ${height}`);
+  svg.attr("viewBox", `0 0 ${width} ${height}`);
 
   const [lo, hi] = d3.extent(allPoints, (p) => p.conc_m);
   const x = d3.scaleLog().domain([lo, hi]).range([margin.left, width - margin.right]);
@@ -109,20 +112,38 @@ function renderBindingChart(svgSelector, series) {
   function drawSeries(sc) {
     const s = sc.series;
     const color = s.isCurrent ? ACCENT_COLOR : OTHER_COLOR;
-
     const line = sc.curvePoints
       ? d3.line().x((d) => x(d[0])).y((d) => y(d[1]))
       : d3.line().x((p) => x(p.conc_m)).y((p) => y(p.bret));
-    svg
-      .append("path")
-      .datum(sc.curvePoints || s.points)
+    const pathData = sc.curvePoints || s.points;
+
+    const g = svg.append("g");
+    // Other ligands tested against this receptor: hovering names the
+    // chemokine, clicking jumps to its own pair page.
+    const isLinked = !s.isCurrent && s.pairId;
+    if (isLinked) {
+      g.style("cursor", "pointer").on("click", () => {
+        location.href = `pair.html?pair=${encodeURIComponent(s.pairId)}`;
+      });
+      g.append("title").text(`${s.chemokineLabel} — click to view this pair`);
+      // A fat invisible stroke widens the hover/click target beyond the
+      // thin visible line, without changing how the curve looks.
+      g.append("path")
+        .datum(pathData)
+        .attr("d", line)
+        .attr("fill", "none")
+        .attr("stroke", "transparent")
+        .attr("stroke-width", 16);
+    }
+
+    g.append("path")
+      .datum(pathData)
       .attr("d", line)
       .attr("fill", "none")
       .attr("stroke", color)
       .attr("stroke-width", CURVE_WIDTH);
 
-    svg
-      .selectAll(null)
+    g.selectAll(null)
       .data(s.points)
       .join("circle")
       .attr("cx", (p) => x(p.conc_m))
