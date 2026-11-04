@@ -225,15 +225,17 @@ a.pair-link:hover { text-decoration: underline; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; font-size: 13px; color: var(--text-dim); }
 .legend-swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
 
-.binding-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+/* flex-start (not space-between) so the chart and schematic sit together
+   with a fixed gap instead of being pushed to the panel's two edges — on a
+   wide window that left a growing dead strip of whitespace between them. */
+.binding-row { display: flex; align-items: center; justify-content: flex-start; gap: 32px; flex-wrap: wrap; }
 /* The chart's internal coordinate system (its viewBox) is a fixed 420x260,
    but its rendered size is fluid — width:100% of whatever this flexes down
-   to, capped so it doesn't balloon in a very wide panel, with height
-   following from the viewBox's aspect ratio. A hardcoded pixel width here
-   previously overflowed or looked cramped depending on the browser's own
-   width. */
-.binding-row svg { flex: 1 1 360px; width: 100%; min-width: 260px; max-width: 440px; height: auto; }
-.assay-schematic { flex: 0 1 300px; max-width: 300px; height: auto; }
+   to, with height following from the viewBox's aspect ratio. flex-grow: 1
+   (vs. the schematic's 0) means the chart is the one that takes up any
+   extra panel width, closing that gap instead of leaving it empty. */
+.binding-row svg { flex: 1 1 420px; width: 100%; min-width: 280px; max-width: 640px; height: auto; }
+.assay-schematic { flex: 0 1 260px; max-width: 260px; height: auto; }
 .note { color: var(--text-dim); font-size: 13px; margin-top: 8px; }
 
 .loading { color: var(--text-dim); padding: 24px; text-align: center; }
