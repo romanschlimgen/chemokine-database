@@ -220,7 +220,12 @@ function fmtNum(v, unit) {
     const parts = [];
 
     if (curvePoints.length) {
-      parts.push('<svg id="bindingChart" width="100%"></svg>');
+      parts.push(`
+        <div class="binding-row">
+          <svg id="bindingChart" width="100%"></svg>
+          <img class="assay-schematic" src="assets/bret-assay-schematic.png" alt="BRET assay schematic: NLuc-tagged receptor and AZDye568-labeled chemokine" />
+        </div>
+      `);
     }
 
     if (numeric.length) {
@@ -246,13 +251,6 @@ function fmtNum(v, unit) {
           )
           .join("")
       );
-    }
-    const legacy = rows.find((r) => r.legacy_figure);
-    if (legacy) {
-      parts.push(`
-        <img class="legacy-figure" src="data/legacy_figures/${encodeURIComponent(legacy.legacy_figure)}" alt="Legacy binding figure" />
-        <p class="note">Legacy figure from the original site, kept for reference${curvePoints.length ? " (superseded by the chart above, fit from the same underlying data)" : ""}.</p>
-      `);
     }
     return parts.join("");
   }
