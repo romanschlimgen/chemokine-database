@@ -184,11 +184,17 @@ function fmtNum(v, unit) {
       },
       onClick: async (residues) => {
         const sv = await structureViewer;
-        if (sv) sv.showSideChains(residues);
+        if (sv) {
+          sv.showSideChains(residues);
+          sv.focusResidues(residues);
+        }
       },
       onClickClear: async () => {
         const sv = await structureViewer;
-        if (sv) sv.clearSideChains();
+        if (sv) {
+          sv.clearSideChains();
+          sv.clearFocus();
+        }
       },
     }
   );

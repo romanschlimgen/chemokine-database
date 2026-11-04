@@ -196,6 +196,15 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
   // touching the base cartoon/coloring component.
   let sideChainComponentRefs = [];
 
+  // "element-symbol" with a custom carbonColor colors carbon atoms with the
+  // chain's grey/blue theme while leaving H/N/O/S (and everything else) in
+  // their standard CPK element colors — a plain "uniform" theme was painting
+  // every atom (not just carbon) the chain color, hiding which atoms were
+  // heteroatoms.
+  function sideChainColorTheme(color) {
+    return { color: "element-symbol", colorParams: { carbonColor: { name: "uniform", params: { value: color } } } };
+  }
+
   async function showSideChains(residues) {
     await clearSideChains();
     if (!residues || !residues.length) return;
@@ -218,10 +227,7 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
       sideChainComponentRefs.push(comp.cell.transform.ref);
       const color = colorByChain.get(chain);
       if (color !== undefined) {
-        await viewer.plugin.managers.structure.component.updateRepresentationsTheme([comp], {
-          color: "uniform",
-          colorParams: { value: color },
-        });
+        await viewer.plugin.managers.structure.component.updateRepresentationsTheme([comp], sideChainColorTheme(color));
       }
     }
   }
@@ -250,11 +256,22 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
       if (!match) continue;
       const color = colorByChain.get(match[1]);
       if (color === undefined) continue;
-      await viewer.plugin.managers.structure.component.updateRepresentationsTheme([comp], {
-        color: "uniform",
-        colorParams: { value: color },
-      });
+      await viewer.plugin.managers.structure.component.updateRepresentationsTheme([comp], sideChainColorTheme(color));
     }
+  }
+
+  // Mirrors what clicking directly on the model already does (zoom in and
+  // highlight the surrounding interactions), but driven from the contact
+  // diagram's click instead of Mol*'s own picking.
+  function focusResidues(residues) {
+    const loci = buildResidueLoci(residues);
+    if (!loci || !loci.elements || !loci.elements.length) return;
+    viewer.plugin.managers.structure.focus.setFromLoci(loci);
+    viewer.plugin.managers.camera.focusLoci(loci);
+  }
+
+  function clearFocus() {
+    viewer.plugin.managers.structure.focus.clear();
   }
 
   // Clicking directly on the 3D model (Mol*'s own built-in picking
@@ -266,5 +283,5 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     applySideChainColors();
   });
 
-  return { viewer, highlightResidues, clearHighlight, showSideChains, clearSideChains };
+  return { viewer, highlightResidues, clearHighlight, showSideChains, clearSideChains, focusResidues, clearFocus };
 }
