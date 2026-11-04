@@ -134,7 +134,33 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     }
   }
 
+  // component.updateRepresentationsTheme (used above for color) silently
+  // ignores a size/sizeParams theme — size has to be set by updating each
+  // representation's own transform params directly instead.
+  async function setRepresentationSize(component, value) {
+    for (const repr of component.representations) {
+      await viewer.plugin
+        .build()
+        .to(repr.cell.transform.ref)
+        .update((old) => ({ ...old, sizeTheme: { name: "uniform", params: { value } } }))
+        .commit();
+    }
+  }
+
+  // Thickens the cartoon's tubes/loops and strands — Mol*'s default cartoon
+  // reads thin next to a bold illustration style like the paper's own
+  // figures. Needs to be callable again later too (the native-click reset
+  // below wipes it back to the default scale, same as the color theme).
+  async function applyCartoonThickness() {
+    const current = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+    if (!current) return;
+    const polymer = current.components.find((c) => c.cell.obj && c.cell.obj.label === "Polymer");
+    if (!polymer) return;
+    await setRepresentationSize(polymer, 2.5);
+  }
+
   await applyChainColors();
+  await applyCartoonThickness();
 
   function getStructure() {
     const current = viewer.plugin.managers.structure.hierarchy.current;
@@ -204,6 +230,9 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
   function sideChainColorTheme(color) {
     return { color: "element-symbol", colorParams: { carbonColor: { name: "uniform", params: { value: color } } } };
   }
+  // Thicker sticks, matching the bolder cartoon — set via setRepresentationSize
+  // (see its comment above) rather than a theme param.
+  const SIDE_CHAIN_SIZE = 1.8;
 
   async function showSideChains(residues) {
     await clearSideChains();
@@ -229,6 +258,7 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
       if (color !== undefined) {
         await viewer.plugin.managers.structure.component.updateRepresentationsTheme([comp], sideChainColorTheme(color));
       }
+      await setRepresentationSize(comp, SIDE_CHAIN_SIZE);
     }
   }
 
@@ -257,6 +287,7 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
       const color = colorByChain.get(match[1]);
       if (color === undefined) continue;
       await viewer.plugin.managers.structure.component.updateRepresentationsTheme([comp], sideChainColorTheme(color));
+      await setRepresentationSize(comp, SIDE_CHAIN_SIZE);
     }
   }
 
@@ -280,6 +311,7 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
   // reassert it after every canvas click.
   viewer.plugin.behaviors.interaction.click.subscribe(() => {
     applyChainColors();
+    applyCartoonThickness();
     applySideChainColors();
   });
 
