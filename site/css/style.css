@@ -225,16 +225,19 @@ a.pair-link:hover { text-decoration: underline; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; font-size: 13px; color: var(--text-dim); }
 .legend-swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
 
-/* flex-start (not space-between) so the chart and schematic sit together
-   with a fixed gap instead of being pushed to the panel's two edges — on a
-   wide window that left a growing dead strip of whitespace between them. */
-.binding-row { display: flex; align-items: center; justify-content: flex-start; gap: 32px; flex-wrap: wrap; }
+/* The row itself is capped — letting it stretch to the panel's full width
+   is what caused space-between to fling the schematic across a growing dead
+   gap on wide windows, and flex-start alone just moved that same dead gap
+   to trail after the schematic instead. Capped, there's rarely much leftover
+   space for either problem to show up, and space-between still gives the
+   schematic a bit of room to sit further right of the chart. */
+.binding-row { display: flex; align-items: center; justify-content: space-between; gap: 32px; flex-wrap: wrap; max-width: 820px; }
 /* The chart's internal coordinate system (its viewBox) is a fixed 420x260,
    but its rendered size is fluid — width:100% of whatever this flexes down
-   to, with height following from the viewBox's aspect ratio. flex-grow: 1
-   (vs. the schematic's 0) means the chart is the one that takes up any
-   extra panel width, closing that gap instead of leaving it empty. */
-.binding-row svg { flex: 1 1 420px; width: 100%; min-width: 280px; max-width: 640px; height: auto; }
+   to, with height following from the viewBox's aspect ratio. overflow:
+   visible so the hover label (which can sit past x=420 near the curve's
+   right edge) isn't clipped at the viewBox boundary. */
+.binding-row svg { flex: 1 1 420px; width: 100%; min-width: 280px; max-width: 520px; height: auto; overflow: visible; }
 .assay-schematic { flex: 0 1 260px; max-width: 260px; height: auto; }
 .note { color: var(--text-dim); font-size: 13px; margin-top: 8px; }
 

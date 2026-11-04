@@ -147,9 +147,16 @@ function renderBindingChart(svgSelector, series) {
     }
     g.on("mousemove", (event) => {
       const [mx, my] = d3.pointer(event, svg.node());
+      // Near the curve's right edge, anchoring from the left would run the
+      // label past the chart's own right edge — visually clipped, since the
+      // assay schematic sitting right next to the chart paints over
+      // whatever spills into the gap between them. Anchoring from the
+      // right instead keeps the whole label inside the chart.
+      const nearRightEdge = mx > width - 110;
       hoverLabel
-        .attr("x", mx + 10)
+        .attr("x", nearRightEdge ? mx - 10 : mx + 10)
         .attr("y", my - 10)
+        .attr("text-anchor", nearRightEdge ? "end" : "start")
         .attr("fill", color)
         .text(s.chemokineLabel)
         .style("display", null)
