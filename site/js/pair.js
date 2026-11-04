@@ -121,7 +121,9 @@ function fmtNum(v, unit) {
     const fit = fitRow
       ? { bottom: fitRow.fit_bottom, top: fitRow.fit_top, kd_nm: fitRow.kd_nm }
       : null;
-    renderBindingChart("#bindingChart", bindingCurvePoints, fit);
+    renderBindingChart("#bindingChart", bindingCurvePoints, fit, {
+      chemokineLabel: tracerLabel(binding, pair.chemokine_name),
+    });
   }
 
   // Structure viewer (Mol*), colored to match the receptor/chemokine logo —
