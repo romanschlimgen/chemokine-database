@@ -225,9 +225,9 @@ a.pair-link:hover { text-decoration: underline; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; font-size: 13px; color: var(--text-dim); }
 .legend-swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
 
-.binding-row { display: flex; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+.binding-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 .binding-row svg { flex: 0 0 auto; }
-.assay-schematic { flex: 0 1 260px; max-width: 260px; height: auto; }
+.assay-schematic { flex: 0 1 300px; max-width: 300px; height: auto; }
 .note { color: var(--text-dim); font-size: 13px; margin-top: 8px; }
 
 .loading { color: var(--text-dim); padding: 24px; text-align: center; }
