@@ -111,11 +111,17 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
 
   const queryMods = await loadQueryModules();
 
-  if (chainColors && chainColors.length) {
+  // Reapplies the receptor/chemokine chain colors to the base (cartoon)
+  // components. Mol*'s own built-in click-to-select behavior on the 3D
+  // canvas re-triggers its default representation coloring (back to the
+  // element/chain-id palette), so this needs to be callable again later,
+  // not just once at load.
+  async function applyChainColors() {
+    if (!chainColors || !chainColors.length) return;
     const { MS, StructureSelectionQuery, Color } = queryMods;
+    const structureRef = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+    if (!structureRef) return;
     for (const { chain, rgb } of chainColors) {
-      const structureRef = viewer.plugin.managers.structure.hierarchy.current.structures[0];
-      if (!structureRef) continue;
       const expr = MS.struct.generator.atomGroups({
         "chain-test": MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chain]),
       });
@@ -127,6 +133,8 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
       );
     }
   }
+
+  await applyChainColors();
 
   function getStructure() {
     const current = viewer.plugin.managers.structure.hierarchy.current;
@@ -226,6 +234,37 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
       await viewer.plugin.build().delete(ref).commit();
     }
   }
+
+  // Reapplies the per-chain color to every currently-shown side-chain
+  // component, by the same "Side chains (<chain>)" label used in
+  // showSideChains above.
+  async function applySideChainColors() {
+    if (!sideChainComponentRefs.length) return;
+    const { Color } = queryMods;
+    const colorByChain = new Map((chainColors || []).map(({ chain, rgb }) => [chain, Color.fromRgb(rgb[0], rgb[1], rgb[2])]));
+    const current = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+    if (!current) return;
+    for (const comp of current.components) {
+      const label = comp.cell.obj && comp.cell.obj.label;
+      const match = label && label.match(/^Side chains \((.+)\)$/);
+      if (!match) continue;
+      const color = colorByChain.get(match[1]);
+      if (color === undefined) continue;
+      await viewer.plugin.managers.structure.component.updateRepresentationsTheme([comp], {
+        color: "uniform",
+        colorParams: { value: color },
+      });
+    }
+  }
+
+  // Clicking directly on the 3D model (Mol*'s own built-in picking
+  // behavior, separate from the contact diagram's click handling) resets
+  // Mol*'s default representation coloring, undoing the theme above — so
+  // reassert it after every canvas click.
+  viewer.plugin.behaviors.interaction.click.subscribe(() => {
+    applyChainColors();
+    applySideChainColors();
+  });
 
   return { viewer, highlightResidues, clearHighlight, showSideChains, clearSideChains };
 }
