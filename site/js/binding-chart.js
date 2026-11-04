@@ -1,14 +1,13 @@
-// Renders a BRET saturation-binding chart: the real (concentration, BRET)
-// data points from data/raw_binding/ (via build_db.py -> binding_curve_points)
-// plus the fitted three-parameter logistic curve (Hill slope fixed at 1)
-// from scripts/analyze_binding.py, on a log concentration axis. If there's
-// no fit (e.g. no detectable binding), just the points are drawn.
+// Renders a BRET saturation-binding chart in the manuscript's own style:
+// every chemokine tested against this receptor is drawn as a thin grey
+// context curve (data from data/raw_binding/ -> binding_curve_points), with
+// only the chemokine on the current pair's page highlighted in blue and
+// labeled. Curves are the fitted three-parameter logistic (Hill slope fixed
+// at 1) from scripts/analyze_binding.py; series with no fit just show
+// scatter points.
 //   Y = bottom + (top - bottom) / (1 + 10^(logEC50 - X)), X = log10(concM)
-//
-// Styled to match the manuscript's own binding-curve panels: bare log10
-// exponents on the x-axis (no unit-converted tick labels), a colored label
-// on the curve itself rather than a boxed legend, and open axes.
-const CURVE_COLOR = "#0f5fa6";
+const ACCENT_COLOR = "#0f5fa6";
+const OTHER_COLOR = "#9aa0a8";
 
 function logistic3pl(concM, bottom, top, ec50Nm) {
   const logx = Math.log10(concM);
@@ -17,8 +16,8 @@ function logistic3pl(concM, bottom, top, ec50Nm) {
 }
 
 // Pulls the exact raw-data column header (e.g. "CXCL12-AZ568") back out of
-// analyze_binding.py's notes text, so the axis label matches the real tracer
-// used in this assay rather than a generic chemokine name.
+// analyze_binding.py's notes text, so axis/curve labels match the real
+// tracer used in this assay rather than a generic chemokine name.
 function tracerLabel(bindingRows, fallbackName) {
   for (const r of bindingRows) {
     const m = r.notes && r.notes.match(/log\[([^\]]+)\]/);
@@ -27,28 +26,27 @@ function tracerLabel(bindingRows, fallbackName) {
   return fallbackName;
 }
 
-function renderBindingChart(svgSelector, points, fit, meta) {
+function renderBindingChart(svgSelector, series) {
   const svg = d3.select(svgSelector);
   svg.selectAll("*").remove();
-  if (!points.length) return;
+  const allPoints = series.flatMap((s) => s.points);
+  if (!allPoints.length) return;
 
-  const chemokineLabel = (meta && meta.chemokineLabel) || "ligand";
+  const current = series.find((s) => s.isCurrent) || series[0];
 
-  const width = Math.max(svg.node().clientWidth || 480, 480);
+  const width = Math.max(svg.node().clientWidth || 420, 380);
   const height = 260;
-  const margin = { top: 18, right: 24, bottom: 46, left: 50 };
+  const margin = { top: 18, right: 20, bottom: 44, left: 50 };
+  // Gap between the two axis lines and the plot content, matching the
+  // manuscript's detached-spine style (seaborn/ggplot "offset axes").
+  const axisOffset = 7;
   svg.attr("height", height).attr("viewBox", `0 0 ${width} ${height}`);
 
-  const [loRaw, hiRaw] = d3.extent(points, (p) => p.conc_m);
-  // Pad the plotted domain a bit beyond the tested range ("slightly longer
-  // x-axis") so the end points don't sit flush against the axis — the curve
-  // itself is still only drawn across the concentrations actually tested.
-  const pad = 0.4;
-  const lo = Math.pow(10, Math.log10(loRaw) - pad);
-  const hi = Math.pow(10, Math.log10(hiRaw) + pad);
+  const [lo, hi] = d3.extent(allPoints, (p) => p.conc_m);
   const x = d3.scaleLog().domain([lo, hi]).range([margin.left, width - margin.right]);
 
-  const yMax = Math.max(d3.max(points, (p) => p.bret), fit ? fit.top : 0) * 1.1;
+  const fitTops = series.filter((s) => s.fit).map((s) => s.fit.top);
+  const yMax = Math.max(d3.max(allPoints, (p) => p.bret), fitTops.length ? d3.max(fitTops) : 0) * 1.1;
   const y = d3.scaleLinear().domain([0, yMax]).nice().range([height - margin.bottom, margin.top]);
 
   const tickExpLo = Math.ceil(Math.log10(lo));
@@ -57,7 +55,7 @@ function renderBindingChart(svgSelector, points, fit, meta) {
 
   svg
     .append("g")
-    .attr("transform", `translate(0,${height - margin.bottom})`)
+    .attr("transform", `translate(0,${height - margin.bottom + axisOffset})`)
     .call(d3.axisBottom(x).tickValues(tickValues).tickFormat((d) => Math.round(Math.log10(d))).tickSizeOuter(0))
     .selectAll("text")
     .attr("font-size", 11);
@@ -65,21 +63,21 @@ function renderBindingChart(svgSelector, points, fit, meta) {
   svg
     .append("text")
     .attr("x", (margin.left + width - margin.right) / 2)
-    .attr("y", height - 6)
+    .attr("y", height - 4)
     .attr("text-anchor", "middle")
     .attr("font-size", 11)
     .attr("fill", "var(--text-dim)")
-    .text(`log[${chemokineLabel}], M`);
+    .text(`log[${current.chemokineLabel}], M`);
 
   svg
     .append("g")
-    .attr("transform", `translate(${margin.left},0)`)
+    .attr("transform", `translate(${margin.left - axisOffset},0)`)
     .call(d3.axisLeft(y).ticks(5).tickSizeOuter(0));
 
   svg
     .append("text")
     .attr("x", -(height - margin.top - margin.bottom) / 2 - margin.top)
-    .attr("y", 14)
+    .attr("y", 12)
     .attr("transform", "rotate(-90)")
     .attr("text-anchor", "middle")
     .attr("font-size", 11)
@@ -87,46 +85,70 @@ function renderBindingChart(svgSelector, points, fit, meta) {
     .attr("fill", "var(--text)")
     .text("BRET Ratio");
 
-  if (fit) {
-    const steps = 80;
-    const curvePoints = d3.range(steps + 1).map((i) => {
-      const logc = Math.log10(loRaw) + (i / steps) * (Math.log10(hiRaw) - Math.log10(loRaw));
-      const c = Math.pow(10, logc);
-      return [c, logistic3pl(c, fit.bottom, fit.top, fit.kd_nm)];
-    });
-    const line = d3.line().x((d) => x(d[0])).y((d) => y(d[1]));
-    svg
-      .append("path")
-      .datum(curvePoints)
-      .attr("d", line)
-      .attr("fill", "none")
-      .attr("stroke", CURVE_COLOR)
-      .attr("stroke-width", 2.5);
+  function drawSeries(s) {
+    const color = s.isCurrent ? ACCENT_COLOR : OTHER_COLOR;
+    const [sLo, sHi] = d3.extent(s.points, (p) => p.conc_m);
 
-    // Direct on-chart label near the curve's plateau, in the curve's own
-    // color, in place of a separate legend box.
-    const labelX = curvePoints[curvePoints.length - 1][0];
+    if (s.fit) {
+      const steps = 80;
+      const curvePoints = d3.range(steps + 1).map((i) => {
+        const logc = Math.log10(sLo) + (i / steps) * (Math.log10(sHi) - Math.log10(sLo));
+        const c = Math.pow(10, logc);
+        return [c, logistic3pl(c, s.fit.bottom, s.fit.top, s.fit.kd_nm)];
+      });
+      const line = d3.line().x((d) => x(d[0])).y((d) => y(d[1]));
+      svg
+        .append("path")
+        .datum(curvePoints)
+        .attr("d", line)
+        .attr("fill", "none")
+        .attr("stroke", color)
+        .attr("stroke-width", 2);
+    } else {
+      const line = d3.line().x((p) => x(p.conc_m)).y((p) => y(p.bret));
+      svg
+        .append("path")
+        .datum(s.points)
+        .attr("d", line)
+        .attr("fill", "none")
+        .attr("stroke", color)
+        .attr("stroke-width", 2);
+    }
+
     svg
-      .append("text")
-      .attr("x", x(labelX))
-      .attr("y", y(fit.top) - 8)
-      .attr("text-anchor", "end")
-      .attr("font-size", 12)
-      .attr("font-weight", 600)
-      .attr("fill", CURVE_COLOR)
-      .text(chemokineLabel);
+      .selectAll(null)
+      .data(s.points)
+      .join("circle")
+      .attr("cx", (p) => x(p.conc_m))
+      .attr("cy", (p) => y(p.bret))
+      .attr("r", s.isCurrent ? 3.5 : 2.5)
+      .attr("fill", "#ffffff")
+      .attr("stroke", color)
+      .attr("stroke-width", 1.5)
+      .append("title")
+      .text((p) => `${s.chemokineLabel}: ${p.conc_m.toExponential(1)} M — BRET ${p.bret}`);
   }
 
-  svg
-    .selectAll("circle")
-    .data(points)
-    .join("circle")
-    .attr("cx", (p) => x(p.conc_m))
-    .attr("cy", (p) => y(p.bret))
-    .attr("r", 4)
-    .attr("fill", fit ? "#ffffff" : CURVE_COLOR)
-    .attr("stroke", CURVE_COLOR)
-    .attr("stroke-width", 1.5)
-    .append("title")
-    .text((p) => `${p.conc_m.toExponential(1)} M — BRET ${p.bret}`);
+  // Context curves first, the highlighted one last so it sits on top.
+  series.filter((s) => !s.isCurrent).forEach(drawSeries);
+  if (current) drawSeries(current);
+
+  // Single direct label for the highlighted curve, on the left side of the
+  // chart (in its open low-concentration region) rather than a legend box.
+  if (current) {
+    const labelX = margin.left + (width - margin.left - margin.right) * 0.1;
+    const labelConc = Math.pow(10, Math.log10(lo) + (Math.log10(hi) - Math.log10(lo)) * 0.1);
+    const labelY = current.fit
+      ? logistic3pl(labelConc, current.fit.bottom, current.fit.top, current.fit.kd_nm)
+      : d3.mean(current.points, (p) => p.bret);
+    svg
+      .append("text")
+      .attr("x", labelX)
+      .attr("y", Math.max(margin.top + 10, y(labelY) - 10))
+      .attr("text-anchor", "start")
+      .attr("font-size", 12)
+      .attr("font-weight", 700)
+      .attr("fill", ACCENT_COLOR)
+      .text(current.chemokineLabel);
+  }
 }

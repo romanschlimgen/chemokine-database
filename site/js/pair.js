@@ -56,6 +56,36 @@ function fmtNum(v, unit) {
     "SELECT conc_m, bret FROM binding_curve_points WHERE pair_id = ? ORDER BY conc_m",
     [pairId]
   );
+
+  // Every other chemokine tested against this same receptor, for context
+  // curves on the binding chart (greyed out; only this page's own pair is
+  // highlighted) — matches the manuscript's per-receptor panels.
+  const receptorPairs = queryAll(
+    db,
+    `SELECT p.pair_id, c.name AS chemokine_name
+     FROM pairs p JOIN chemokines c ON p.chemokine_id = c.chemokine_id
+     WHERE p.receptor_id = ?`,
+    [pair.receptor_id]
+  );
+  const receptorSeries = receptorPairs
+    .map((rp) => {
+      const points = queryAll(
+        db,
+        "SELECT conc_m, bret FROM binding_curve_points WHERE pair_id = ? ORDER BY conc_m",
+        [rp.pair_id]
+      );
+      if (!points.length) return null;
+      const rpBinding = queryAll(db, "SELECT * FROM binding WHERE pair_id = ?", [rp.pair_id]);
+      const fitRow = rpBinding.find((r) => r.fit_top !== null && r.fit_top !== undefined);
+      return {
+        chemokineLabel: tracerLabel(rpBinding, rp.chemokine_name),
+        points,
+        fit: fitRow ? { bottom: fitRow.fit_bottom, top: fitRow.fit_top, kd_nm: fitRow.kd_nm } : null,
+        isCurrent: rp.pair_id === pairId,
+      };
+    })
+    .filter(Boolean);
+
   const hasStructure = !!pair.structure_file;
   const contacts = hasStructure ? queryAll(db, "SELECT * FROM contacts WHERE pair_id = ?", [pairId]) : [];
   const receptorResidues = hasStructure
@@ -117,13 +147,7 @@ function fmtNum(v, unit) {
   `;
 
   if (bindingCurvePoints.length) {
-    const fitRow = binding.find((r) => r.fit_top !== null && r.fit_top !== undefined);
-    const fit = fitRow
-      ? { bottom: fitRow.fit_bottom, top: fitRow.fit_top, kd_nm: fitRow.kd_nm }
-      : null;
-    renderBindingChart("#bindingChart", bindingCurvePoints, fit, {
-      chemokineLabel: tracerLabel(binding, pair.chemokine_name),
-    });
+    renderBindingChart("#bindingChart", receptorSeries);
   }
 
   // Structure viewer (Mol*), colored to match the receptor/chemokine logo —
