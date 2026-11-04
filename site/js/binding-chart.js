@@ -109,30 +109,17 @@ function renderBindingChart(svgSelector, series) {
     .attr("fill", "var(--text)")
     .text("BRET Ratio");
 
-  // Same spot used for the always-on current-series label below, so a
-  // hovered context curve's label lands exactly where that curve's own
-  // label would sit if it were the current one.
-  function labelPosition(sc) {
-    const s = sc.series;
-    const labelConc = Math.pow(10, Math.log10(lo) + (Math.log10(hi) - Math.log10(lo)) * 0.1);
-    const labelY = s.fit ? logistic3pl(labelConc, s.fit.bottom, s.fit.top, s.fit.kd_nm) : d3.mean(s.points, (p) => p.bret);
-    return {
-      x: margin.left + (width - margin.left - margin.right) * 0.1,
-      y: Math.max(margin.top + 10, y(labelY) - 10),
-    };
-  }
-
-  // Shared label shown instantly on hovering a context curve, following the
-  // cursor — a native <title> tooltip has the browser's own show delay and
-  // styling, so this draws a plain grey text label instead, matching the
-  // current series' always-on blue one. A white stroke behind the fill
+  // Shared label shown instantly on hovering any curve (current one
+  // included), following the cursor — a native <title> tooltip has the
+  // browser's own show delay and styling, so this draws a plain text label
+  // instead, colored to match whichever curve is hovered (blue for the
+  // current pair, grey for the others). A white stroke behind the fill
   // keeps it legible wherever it lands on top of a curve.
   const hoverLabel = svg
     .append("text")
     .attr("text-anchor", "start")
     .attr("font-size", 12)
     .attr("font-weight", 700)
-    .attr("fill", OTHER_COLOR)
     .attr("stroke", "#ffffff")
     .attr("stroke-width", 3)
     .attr("stroke-linejoin", "round")
@@ -149,35 +136,35 @@ function renderBindingChart(svgSelector, series) {
     const pathData = sc.curvePoints || s.points;
 
     const g = svg.append("g");
-    // Other ligands tested against this receptor: hovering names the
-    // chemokine, clicking jumps to its own pair page.
+    // Hovering any curve (including the current pair's own) names its
+    // chemokine; other ligands tested against this receptor are also
+    // clickable, jumping to their own pair page.
     const isLinked = !s.isCurrent && s.pairId;
     if (isLinked) {
-      g.style("cursor", "pointer")
-        .on("click", () => {
-          location.href = `pair.html?pair=${encodeURIComponent(s.pairId)}`;
-        })
-        .on("mousemove", (event) => {
-          const [mx, my] = d3.pointer(event, svg.node());
-          hoverLabel
-            .attr("x", mx + 10)
-            .attr("y", my - 10)
-            .text(s.chemokineLabel)
-            .style("display", null)
-            .raise();
-        })
-        .on("mouseleave", () => {
-          hoverLabel.style("display", "none");
-        });
-      // A fat invisible stroke widens the hover/click target beyond the
-      // thin visible line, without changing how the curve looks.
-      g.append("path")
-        .datum(pathData)
-        .attr("d", line)
-        .attr("fill", "none")
-        .attr("stroke", "transparent")
-        .attr("stroke-width", 16);
+      g.style("cursor", "pointer").on("click", () => {
+        location.href = `pair.html?pair=${encodeURIComponent(s.pairId)}`;
+      });
     }
+    g.on("mousemove", (event) => {
+      const [mx, my] = d3.pointer(event, svg.node());
+      hoverLabel
+        .attr("x", mx + 10)
+        .attr("y", my - 10)
+        .attr("fill", color)
+        .text(s.chemokineLabel)
+        .style("display", null)
+        .raise();
+    }).on("mouseleave", () => {
+      hoverLabel.style("display", "none");
+    });
+    // A fat invisible stroke widens the hover/click target beyond the thin
+    // visible line, without changing how the curve looks.
+    g.append("path")
+      .datum(pathData)
+      .attr("d", line)
+      .attr("fill", "none")
+      .attr("stroke", "transparent")
+      .attr("stroke-width", 16);
 
     g.append("path")
       .datum(pathData)
@@ -203,19 +190,4 @@ function renderBindingChart(svgSelector, series) {
   seriesCurves.filter((sc) => !sc.series.isCurrent).forEach(drawSeries);
   const currentCurve = seriesCurves.find((sc) => sc.series === current);
   if (currentCurve) drawSeries(currentCurve);
-
-  // Single direct label for the highlighted curve, on the left side of the
-  // chart (in its open low-concentration region) rather than a legend box.
-  if (currentCurve) {
-    const pos = labelPosition(currentCurve);
-    svg
-      .append("text")
-      .attr("x", pos.x)
-      .attr("y", pos.y)
-      .attr("text-anchor", "start")
-      .attr("font-size", 12)
-      .attr("font-weight", 700)
-      .attr("fill", ACCENT_COLOR)
-      .text(current.chemokineLabel);
-  }
 }
