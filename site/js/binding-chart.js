@@ -122,16 +122,21 @@ function renderBindingChart(svgSelector, series) {
     };
   }
 
-  // Shared label shown instantly on hovering a context curve — a native
-  // <title> tooltip has the browser's own show delay and styling, so this
-  // draws a plain grey text label instead, matching the current series'
-  // always-on blue one.
+  // Shared label shown instantly on hovering a context curve, following the
+  // cursor — a native <title> tooltip has the browser's own show delay and
+  // styling, so this draws a plain grey text label instead, matching the
+  // current series' always-on blue one. A white stroke behind the fill
+  // keeps it legible wherever it lands on top of a curve.
   const hoverLabel = svg
     .append("text")
     .attr("text-anchor", "start")
     .attr("font-size", 12)
     .attr("font-weight", 700)
     .attr("fill", OTHER_COLOR)
+    .attr("stroke", "#ffffff")
+    .attr("stroke-width", 3)
+    .attr("stroke-linejoin", "round")
+    .attr("paint-order", "stroke")
     .style("pointer-events", "none")
     .style("display", "none");
 
@@ -152,9 +157,14 @@ function renderBindingChart(svgSelector, series) {
         .on("click", () => {
           location.href = `pair.html?pair=${encodeURIComponent(s.pairId)}`;
         })
-        .on("mouseenter", () => {
-          const pos = labelPosition(sc);
-          hoverLabel.attr("x", pos.x).attr("y", pos.y).text(s.chemokineLabel).style("display", null).raise();
+        .on("mousemove", (event) => {
+          const [mx, my] = d3.pointer(event, svg.node());
+          hoverLabel
+            .attr("x", mx + 10)
+            .attr("y", my - 10)
+            .text(s.chemokineLabel)
+            .style("display", null)
+            .raise();
         })
         .on("mouseleave", () => {
           hoverLabel.style("display", "none");
