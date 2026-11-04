@@ -210,7 +210,8 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
   // completely unchanged. The actual stick width comes from two of the
   // representation's own type params instead: sizeFactor (the shared base
   // radius both balls and sticks scale from) and linkScale (the stick's
-  // radius as a fraction of that).
+  // radius as a fraction of that). ignoreHydrogens drops the (mostly
+  // uninformative) hydrogens cluttering the side chains.
   async function thickenSticks(component) {
     for (const repr of component.representations) {
       await viewer.plugin
@@ -218,7 +219,7 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
         .to(repr.cell.transform.ref)
         .update((old) => ({
           ...old,
-          type: { ...old.type, params: { ...old.type.params, sizeFactor: 0.35, linkScale: 1 } },
+          type: { ...old.type, params: { ...old.type.params, sizeFactor: 0.35, linkScale: 1, ignoreHydrogens: true } },
         }))
         .commit();
     }
@@ -296,12 +297,31 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
   }
 
   // Clicking directly on the 3D model (Mol*'s own built-in picking
-  // behavior, separate from the contact diagram's click handling) resets
-  // Mol*'s default representation coloring, undoing the theme above — so
-  // reassert it after every canvas click.
+  // behavior, separate from the contact diagram's click handling) does two
+  // things we don't want: resets the cartoon/side-chain coloring back to
+  // Mol*'s own default palette, and auto-adds its own "[Focus] Target" /
+  // "[Focus] Surroundings" components — a *different*, default-themed,
+  // default-sized ball-and-stick overlay, independent of (and inconsistent
+  // with) showSideChains above. Removing those components by calling
+  // structure.focus.clear() right away doesn't work — Mol*'s own behavior
+  // that builds them runs asynchronously off the same click and finishes
+  // *after* our handler, so the components still show up a moment later
+  // regardless. Deleting them directly, after a short delay for that async
+  // build to finish, is the only thing that reliably caught them in
+  // testing.
+  async function clearNativeFocusComponents() {
+    const current = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+    if (!current) return;
+    const targets = current.components.filter((c) => c.cell.obj && c.cell.obj.label && c.cell.obj.label.startsWith("[Focus]"));
+    for (const t of targets) {
+      await viewer.plugin.build().delete(t.cell.transform.ref).commit();
+    }
+  }
+
   viewer.plugin.behaviors.interaction.click.subscribe(() => {
     applyChainColors();
     applySideChainColors();
+    setTimeout(clearNativeFocusComponents, 150);
   });
 
   return { viewer, highlightResidues, clearHighlight, showSideChains, clearSideChains, focusResidues };
