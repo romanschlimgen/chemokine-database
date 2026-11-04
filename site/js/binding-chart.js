@@ -8,6 +8,7 @@
 //   Y = bottom + (top - bottom) / (1 + 10^(logEC50 - X)), X = log10(concM)
 const ACCENT_COLOR = "#0f5fa6";
 const OTHER_COLOR = "#9aa0a8";
+const CURVE_WIDTH = 5;
 
 function logistic3pl(concM, bottom, top, ec50Nm) {
   const logx = Math.log10(concM);
@@ -34,19 +35,39 @@ function renderBindingChart(svgSelector, series) {
 
   const current = series.find((s) => s.isCurrent) || series[0];
 
-  const width = Math.max(svg.node().clientWidth || 420, 380);
+  // A fixed, compact width rather than stretching to fill the panel —
+  // matches the manuscript's own small multiples.
+  const width = 340;
   const height = 260;
   const margin = { top: 18, right: 20, bottom: 44, left: 50 };
   // Gap between the two axis lines and the plot content, matching the
   // manuscript's detached-spine style (seaborn/ggplot "offset axes").
   const axisOffset = 7;
-  svg.attr("height", height).attr("viewBox", `0 0 ${width} ${height}`);
+  svg.attr("width", width).attr("height", height).attr("viewBox", `0 0 ${width} ${height}`);
 
   const [lo, hi] = d3.extent(allPoints, (p) => p.conc_m);
   const x = d3.scaleLog().domain([lo, hi]).range([margin.left, width - margin.right]);
 
-  const fitTops = series.filter((s) => s.fit).map((s) => s.fit.top);
-  const yMax = Math.max(d3.max(allPoints, (p) => p.bret), fitTops.length ? d3.max(fitTops) : 0) * 1.1;
+  // Each series' curve, precomputed here (not just inferred from the fit's
+  // asymptotic "top" parameter, which an extrapolated fit may never actually
+  // reach within the plotted range) so the y-axis max reflects what's really
+  // drawn on screen.
+  const seriesCurves = series.map((s) => {
+    if (!s.fit) return { series: s, curvePoints: null };
+    const [sLo, sHi] = d3.extent(s.points, (p) => p.conc_m);
+    const steps = 80;
+    const curvePoints = d3.range(steps + 1).map((i) => {
+      const logc = Math.log10(sLo) + (i / steps) * (Math.log10(sHi) - Math.log10(sLo));
+      const c = Math.pow(10, logc);
+      return [c, logistic3pl(c, s.fit.bottom, s.fit.top, s.fit.kd_nm)];
+    });
+    return { series: s, curvePoints };
+  });
+  const plottedMax = Math.max(
+    d3.max(allPoints, (p) => p.bret),
+    d3.max(seriesCurves.flatMap((sc) => (sc.curvePoints ? sc.curvePoints.map((d) => d[1]) : [])))
+  );
+  const yMax = plottedMax * 1.1;
   const y = d3.scaleLinear().domain([0, yMax]).nice().range([height - margin.bottom, margin.top]);
 
   const tickExpLo = Math.ceil(Math.log10(lo));
@@ -85,35 +106,20 @@ function renderBindingChart(svgSelector, series) {
     .attr("fill", "var(--text)")
     .text("BRET Ratio");
 
-  function drawSeries(s) {
+  function drawSeries(sc) {
+    const s = sc.series;
     const color = s.isCurrent ? ACCENT_COLOR : OTHER_COLOR;
-    const [sLo, sHi] = d3.extent(s.points, (p) => p.conc_m);
 
-    if (s.fit) {
-      const steps = 80;
-      const curvePoints = d3.range(steps + 1).map((i) => {
-        const logc = Math.log10(sLo) + (i / steps) * (Math.log10(sHi) - Math.log10(sLo));
-        const c = Math.pow(10, logc);
-        return [c, logistic3pl(c, s.fit.bottom, s.fit.top, s.fit.kd_nm)];
-      });
-      const line = d3.line().x((d) => x(d[0])).y((d) => y(d[1]));
-      svg
-        .append("path")
-        .datum(curvePoints)
-        .attr("d", line)
-        .attr("fill", "none")
-        .attr("stroke", color)
-        .attr("stroke-width", 2);
-    } else {
-      const line = d3.line().x((p) => x(p.conc_m)).y((p) => y(p.bret));
-      svg
-        .append("path")
-        .datum(s.points)
-        .attr("d", line)
-        .attr("fill", "none")
-        .attr("stroke", color)
-        .attr("stroke-width", 2);
-    }
+    const line = sc.curvePoints
+      ? d3.line().x((d) => x(d[0])).y((d) => y(d[1]))
+      : d3.line().x((p) => x(p.conc_m)).y((p) => y(p.bret));
+    svg
+      .append("path")
+      .datum(sc.curvePoints || s.points)
+      .attr("d", line)
+      .attr("fill", "none")
+      .attr("stroke", color)
+      .attr("stroke-width", CURVE_WIDTH);
 
     svg
       .selectAll(null)
@@ -130,8 +136,9 @@ function renderBindingChart(svgSelector, series) {
   }
 
   // Context curves first, the highlighted one last so it sits on top.
-  series.filter((s) => !s.isCurrent).forEach(drawSeries);
-  if (current) drawSeries(current);
+  seriesCurves.filter((sc) => !sc.series.isCurrent).forEach(drawSeries);
+  const currentCurve = seriesCurves.find((sc) => sc.series === current);
+  if (currentCurve) drawSeries(currentCurve);
 
   // Single direct label for the highlighted curve, on the left side of the
   // chart (in its open low-concentration region) rather than a legend box.
