@@ -67,6 +67,11 @@ function renderTable(rows) {
      ORDER BY r.name, c.name`
   );
 
+  // Arriving from the navbar's search box or a Receptor/Chemokine dropdown
+  // link (index.html?q=...) pre-fills the on-page search with that term.
+  const initialQuery = new URLSearchParams(location.search).get("q");
+  if (initialQuery) document.getElementById("search").value = initialQuery;
+
   const pairTypeFilter = document.getElementById("pairTypeFilter");
   const types = [...new Set(allRows.map((r) => r.pair_type).filter(Boolean))].sort();
   for (const t of types) {

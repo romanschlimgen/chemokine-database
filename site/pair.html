@@ -14,7 +14,18 @@
     </div>
     <div class="nav-right">
       <a href="index.html">Home</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle" type="button">Receptor</button>
+        <div class="nav-dropdown-menu" id="receptorMenu"></div>
+      </div>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle" type="button">Chemokine</button>
+        <div class="nav-dropdown-menu" id="chemokineMenu"></div>
+      </div>
       <a href="https://romanschlimgen.github.io/ckrmodeling/" target="_blank" rel="noopener">Paper</a>
+      <form class="nav-search" id="navSearchForm">
+        <input type="text" id="navSearchInput" placeholder="Search…" />
+      </form>
     </div>
   </nav>
 
@@ -29,6 +40,7 @@
   <script src="https://cdn.jsdelivr.net/npm/molstar@4.1.0/build/viewer/molstar.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.1/dist/d3.min.js"></script>
   <script src="js/db.js"></script>
+  <script src="js/navmenu.js"></script>
   <script type="module" src="js/molstar-viewer.js"></script>
   <script src="js/contact-diagram.js"></script>
   <script src="js/binding-chart.js"></script>
