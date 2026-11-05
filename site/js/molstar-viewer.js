@@ -270,6 +270,16 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     const colorByChain = new Map((chainColors || []).map(({ chain, rgb }) => [chain, Color.fromRgb(rgb[0], rgb[1], rgb[2])]));
 
     for (const chain of new Set(residues.map((r) => r.chain))) {
+      // Checked before component.add() too, not just after: a call that's
+      // been superseded while this was still in flight (component.add is
+      // async) would otherwise still add its now-stale component to the
+      // scene — unstyled, since the checks further down correctly skip
+      // styling it, but by then it's already visible and duplicates
+      // whatever the newer call added for the same chain. Confirmed live
+      // (via logging) that this is exactly what produced a leftover,
+      // never-restyled "Side chains (A)" after clicking two different
+      // chain-A residues in a row.
+      if (generation !== showSideChainsGeneration) return;
       const structureRef = viewer.plugin.managers.structure.hierarchy.current.structures[0];
       if (!structureRef) continue;
       const chainResidues = residues.filter((r) => r.chain === chain);
@@ -279,14 +289,19 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
         { selection: query, options: { checkExisting: false, label }, representation: "ball-and-stick" },
         [structureRef]
       );
+      if (generation !== showSideChainsGeneration) {
+        // Too late to stop the add above, so this stale component must be
+        // deleted directly — it was never tracked in sideChainComponentRefs,
+        // and by now that array belongs to whichever call is current.
+        const updated = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+        const stale = updated.components.find((c) => c.cell.obj && c.cell.obj.label === label && !sideChainComponentRefs.includes(c.cell.transform.ref));
+        if (stale) viewer.plugin.build().delete(stale.cell.transform.ref).commit();
+        return;
+      }
       const updated = viewer.plugin.managers.structure.hierarchy.current.structures[0];
       const comp = updated.components.find((c) => c.cell.obj && c.cell.obj.label === label);
       if (!comp) continue;
-      // Tracked for cleanup regardless of whether a newer call has already
-      // superseded this one — otherwise a component this (now-stale) call
-      // just added would never get deleted by any future clearSideChains().
       sideChainComponentRefs.push(comp.cell.transform.ref);
-      if (generation !== showSideChainsGeneration) return;
       const color = colorByChain.get(chain);
       if (color !== undefined) {
         await styleSideChainComponent(comp, color);
@@ -294,12 +309,17 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     }
   }
 
+  // Deletes every "Side chains (...)" component currently in the hierarchy,
+  // not just the ones tracked in sideChainComponentRefs — a defense against
+  // any future tracking gap leaving an orphaned, never-cleaned-up component
+  // (same category of bug as the one above).
   async function clearSideChains() {
-    if (!sideChainComponentRefs.length) return;
-    const refs = sideChainComponentRefs;
     sideChainComponentRefs = [];
-    for (const ref of refs) {
-      await viewer.plugin.build().delete(ref).commit();
+    const current = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+    if (!current) return;
+    const targets = current.components.filter((c) => c.cell.obj && c.cell.obj.label && c.cell.obj.label.startsWith("Side chains ("));
+    for (const t of targets) {
+      await viewer.plugin.build().delete(t.cell.transform.ref).commit();
     }
   }
 
