@@ -313,25 +313,22 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
   // Mol*'s own default palette, and auto-adds its own "[Focus] Target" /
   // "[Focus] Surroundings" components — a *different*, default-themed,
   // default-sized ball-and-stick overlay, independent of (and inconsistent
-  // with) showSideChains above. Removing those components by calling
-  // structure.focus.clear() right away doesn't work — Mol*'s own behavior
-  // that builds them runs asynchronously off the same click and finishes
-  // *after* our handler, so the components still show up a moment later
-  // regardless. Deleting them directly, after a short delay for that async
-  // build to finish, is the only thing that reliably caught them in
-  // testing.
-  async function clearNativeFocusComponents() {
-    const current = viewer.plugin.managers.structure.hierarchy.current.structures[0];
-    if (!current) return;
-    const targets = current.components.filter((c) => c.cell.obj && c.cell.obj.label && c.cell.obj.label.startsWith("[Focus]"));
-    for (const t of targets) {
-      await viewer.plugin.build().delete(t.cell.transform.ref).commit();
+  // with) showSideChains above. A fixed delay after the click (e.g.
+  // setTimeout(_, 150)) isn't reliable — confirmed live (via
+  // plugin.state.events.object.created) that those "[Focus] *" objects are
+  // built *before* ours on every click, but how long Mol*'s own async build
+  // takes varies, so a guessed delay sometimes leaves them showing (wrong
+  // colors, default thin size) until a later click's cleanup finally catches
+  // up with the previous one. Reacting to the creation event itself, and
+  // deleting immediately, has none of that timing dependency.
+  viewer.plugin.state.events.object.created.subscribe((e) => {
+    if (e.obj && e.obj.label && e.obj.label.startsWith("[Focus]")) {
+      viewer.plugin.build().delete(e.ref).commit();
     }
-  }
+  });
 
   viewer.plugin.behaviors.interaction.click.subscribe((e) => {
     applyChainColors();
-    setTimeout(clearNativeFocusComponents, 150);
 
     // Show (and zoom to) exactly the clicked residue's own side chains,
     // the same way a contact-diagram click already does; clicking empty
