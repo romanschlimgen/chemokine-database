@@ -12,6 +12,13 @@
 // options.onClick(residues) / options.onClickClear() so the caller can show
 // full side chains for it (clicking the same thing again, or empty space,
 // clears the selection).
+// Same grey/blue used for the receptor/chemokine chains in the 3D structure
+// viewer (molstar-viewer.js's RECEPTOR_RGB [147,149,152] / CHEMOKINE_RGB
+// [15,117,188]), so the two views read as the same two "things" rather than
+// each having their own color language.
+const RECEPTOR_COLOR = "#939598";
+const CHEMOKINE_COLOR = "#0f75bc";
+
 function renderContactDiagram(svgSelector, data, labels, options) {
   const { receptorResidues, chemokineResidues, contacts } = data;
   const { receptor: receptorLabel, chemokine: chemokineLabel, receptorChain, chemokineChain } = labels;
@@ -74,7 +81,7 @@ function renderContactDiagram(svgSelector, data, labels, options) {
   const minDist = d3.min(contacts, (c) => c.distance_angstrom) || 0;
   const baseOpacity = d3.scaleLinear().domain([minDist, maxDist]).range([0.8, 0.12]).clamp(true);
   const DIM_OPACITY = 0.04;
-  const edgeColor = "#1d4e89";
+  const edgeColor = CHEMOKINE_COLOR;
   const BASE_STROKE = 1.6;
   const EMPHASIS_STROKE = 3.2;
 
@@ -92,13 +99,13 @@ function renderContactDiagram(svgSelector, data, labels, options) {
     .append("path")
     .attr("d", groupArc({ startAngle: (receptorStart * Math.PI) / 180, endAngle: (receptorEnd * Math.PI) / 180 }))
     .attr("transform", `translate(${cx},${cy})`)
-    .attr("fill", "#1d4e89")
+    .attr("fill", RECEPTOR_COLOR)
     .attr("opacity", 0.9);
   root
     .append("path")
     .attr("d", groupArc({ startAngle: (chemokineStart * Math.PI) / 180, endAngle: (chemokineEnd * Math.PI) / 180 }))
     .attr("transform", `translate(${cx},${cy})`)
-    .attr("fill", "#7fb3e0")
+    .attr("fill", CHEMOKINE_COLOR)
     .attr("opacity", 0.9);
 
   // Labels: created once, hidden by default, shown only for whatever's
@@ -291,8 +298,8 @@ function renderContactDiagram(svgSelector, data, labels, options) {
       });
   }
 
-  addGroup("receptor", receptorResidues, receptorAngle, receptorResnameByNum, receptorHasContact, receptorChain, "R", "#1d4e89");
-  addGroup("chemokine", chemokineResidues, chemokineAngle, chemokineResnameByNum, chemokineHasContact, chemokineChain, "C", "#7fb3e0");
+  addGroup("receptor", receptorResidues, receptorAngle, receptorResnameByNum, receptorHasContact, receptorChain, "R", RECEPTOR_COLOR);
+  addGroup("chemokine", chemokineResidues, chemokineAngle, chemokineResnameByNum, chemokineHasContact, chemokineChain, "C", CHEMOKINE_COLOR);
 
   // Group labels, centered over each arc.
   const receptorMid = (receptorStart + receptorEnd) / 2;
@@ -300,8 +307,8 @@ function renderContactDiagram(svgSelector, data, labels, options) {
   const [rlx, rly] = pointFor(receptorMid, outerRadius + 32);
   const [clx, cly] = pointFor(chemokineMid, outerRadius + 32);
 
-  root.append("text").attr("x", rlx).attr("y", rly).attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 700).attr("fill", "#1d4e89").text(receptorLabel);
-  root.append("text").attr("x", clx).attr("y", cly).attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 700).attr("fill", "#3a6d9e").text(chemokineLabel);
+  root.append("text").attr("x", rlx).attr("y", rly).attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 700).attr("fill", RECEPTOR_COLOR).text(receptorLabel);
+  root.append("text").attr("x", clx).attr("y", cly).attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 700).attr("fill", CHEMOKINE_COLOR).text(chemokineLabel);
 
   // The circle's horizontal extent is sized to fill the panel's width, but
   // nothing stops it from being much shorter than it is wide (the group
