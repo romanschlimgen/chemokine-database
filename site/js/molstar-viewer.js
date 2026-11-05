@@ -60,14 +60,18 @@ function loadQueryModules() {
       import(`https://esm.sh/molstar@${MOLSTAR_VERSION}/lib/mol-model/loci`),
       import(`https://esm.sh/molstar@${MOLSTAR_VERSION}/lib/mol-plugin-state/helpers/structure-selection-query`),
       import(`https://esm.sh/molstar@${MOLSTAR_VERSION}/lib/mol-util/color`),
-    ]).then(([builderMod, compilerMod, contextMod, structureMod, lociMod, selectionQueryMod, colorMod]) => ({
+      import(`https://esm.sh/molstar@${MOLSTAR_VERSION}/lib/mol-data/int`),
+    ]).then(([builderMod, compilerMod, contextMod, structureMod, lociMod, selectionQueryMod, colorMod, intMod]) => ({
       MS: builderMod.MolScriptBuilder,
       compile: compilerMod.compile,
       QueryContext: contextMod.QueryContext,
       StructureSelection: structureMod.StructureSelection,
+      StructureElement: structureMod.StructureElement,
+      StructureProperties: structureMod.StructureProperties,
       EmptyLoci: lociMod.EmptyLoci,
       StructureSelectionQuery: selectionQueryMod.StructureSelectionQuery,
       Color: colorMod.Color,
+      OrderedSet: intMod.OrderedSet,
     }));
   }
   return queryModulesPromise;
@@ -167,6 +171,33 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     return StructureSelection.toLociWithSourceUnits(result);
   }
 
+  // The reverse of buildResidueLoci above — reads the {chain, resnum} pairs
+  // back out of a loci (e.g. from a direct click on the model), so a native
+  // canvas click can drive the same showSideChains/focusResidues path the
+  // contact diagram's click already does. loci.elements' "indices" is a
+  // packed OrderedSet, not a plain array, hence OrderedSet.forEach rather
+  // than a normal loop.
+  function residuesFromLoci(loci) {
+    if (!loci || !loci.elements || !loci.elements.length) return [];
+    const { StructureElement, StructureProperties, OrderedSet } = queryMods;
+    const seen = new Set();
+    const residues = [];
+    for (const el of loci.elements) {
+      const location = StructureElement.Location.create(loci.structure, el.unit, el.unit.elements[0]);
+      OrderedSet.forEach(el.indices, (idx) => {
+        location.element = el.unit.elements[idx];
+        const chain = StructureProperties.chain.auth_asym_id(location);
+        const resnum = StructureProperties.residue.auth_seq_id(location);
+        const key = `${chain}:${resnum}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          residues.push({ chain, resnum });
+        }
+      });
+    }
+    return residues;
+  }
+
   function highlightResidues(residues) {
     const highlights = viewer.plugin.managers.interactivity.lociHighlights;
     const loci = buildResidueLoci(residues);
@@ -262,26 +293,6 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     }
   }
 
-  // Reapplies the per-chain color to every currently-shown side-chain
-  // component, by the same "Side chains (<chain>)" label used in
-  // showSideChains above.
-  async function applySideChainColors() {
-    if (!sideChainComponentRefs.length) return;
-    const { Color } = queryMods;
-    const colorByChain = new Map((chainColors || []).map(({ chain, rgb }) => [chain, Color.fromRgb(rgb[0], rgb[1], rgb[2])]));
-    const current = viewer.plugin.managers.structure.hierarchy.current.structures[0];
-    if (!current) return;
-    for (const comp of current.components) {
-      const label = comp.cell.obj && comp.cell.obj.label;
-      const match = label && label.match(/^Side chains \((.+)\)$/);
-      if (!match) continue;
-      const color = colorByChain.get(match[1]);
-      if (color === undefined) continue;
-      await viewer.plugin.managers.structure.component.updateRepresentationsTheme([comp], sideChainColorTheme(color));
-      await thickenSticks(comp);
-    }
-  }
-
   // Zooms the camera in on exactly the clicked residues. Deliberately does
   // NOT use plugin.managers.structure.focus.setFromLoci() — that's Mol*'s
   // own "click on the model" behavior, but it auto-adds a "Surroundings
@@ -318,10 +329,20 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     }
   }
 
-  viewer.plugin.behaviors.interaction.click.subscribe(() => {
+  viewer.plugin.behaviors.interaction.click.subscribe((e) => {
     applyChainColors();
-    applySideChainColors();
     setTimeout(clearNativeFocusComponents, 150);
+
+    // Show (and zoom to) exactly the clicked residue's own side chains,
+    // the same way a contact-diagram click already does; clicking empty
+    // space clears them, matching the diagram's own background click.
+    const residues = residuesFromLoci(e.current && e.current.loci);
+    if (residues.length) {
+      showSideChains(residues);
+      focusResidues(residues);
+    } else {
+      clearSideChains();
+    }
   });
 
   return { viewer, highlightResidues, clearHighlight, showSideChains, clearSideChains, focusResidues };
