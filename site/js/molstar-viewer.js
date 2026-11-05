@@ -234,11 +234,24 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
   // chain's grey/blue theme while leaving H/N/O/S in their standard CPK
   // colors — a plain "uniform" theme painted every atom one color, hiding
   // which atoms were heteroatoms.
-  async function styleSideChainComponent(component, color) {
-    for (const repr of component.representations) {
+  //
+  // Takes the component's *ref*, not the component object itself —
+  // component.representations (the StructureHierarchyManager's own derived
+  // view) turned out to lag behind the raw state tree: confirmed live that
+  // right after component.add()'s promise resolves, that array can still be
+  // empty even though the representation node already exists in the tree,
+  // silently skipping this whole function (0 iterations) and leaving the
+  // component unstyled — intermittently, since how long the lag lasts
+  // varies. Reading the representation ref(s) directly from
+  // state.data.tree.children (always current the instant commit()
+  // resolves) sidesteps that lag entirely.
+  async function styleSideChainComponent(componentRef, color) {
+    const children = viewer.plugin.state.data.tree.children.get(componentRef);
+    const reprRefs = children ? children.toArray() : [];
+    for (const reprRef of reprRefs) {
       await viewer.plugin
         .build()
-        .to(repr.cell.transform.ref)
+        .to(reprRef)
         .update((old) => ({
           ...old,
           colorTheme: {
@@ -304,7 +317,7 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
       sideChainComponentRefs.push(comp.cell.transform.ref);
       const color = colorByChain.get(chain);
       if (color !== undefined) {
-        await styleSideChainComponent(comp, color);
+        await styleSideChainComponent(comp.cell.transform.ref, color);
       }
     }
   }
