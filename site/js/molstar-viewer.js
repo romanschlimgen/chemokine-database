@@ -212,52 +212,59 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
     viewer.plugin.managers.interactivity.lociHighlights.highlightOnly({ loci: queryMods.EmptyLoci });
   }
 
-  // Adds one ball-and-stick component per chain among the given residues
-  // (full side chains, not just the cartoon backbone), replacing whatever
-  // was there before. A fresh component defaults to Mol*'s own element/
-  // chain palette, not the grey/blue theme applied to the cartoon;
-  // component.applyTheme(selection, ...) — which works fine for recoloring
-  // *existing* components like the cartoon — turned out not to reliably
-  // retheme a component added moments earlier in the same call, so this
-  // uses component.updateRepresentationsTheme(component, ...) instead,
-  // which targets the component directly rather than re-matching a
-  // selection, and only ever needs one color per component (hence one
-  // component per chain rather than one for the whole click). Tracked by
-  // each component's state-tree ref so they can be removed again without
-  // touching the base cartoon/coloring component.
+  // One ball-and-stick component per chain among the given residues (full
+  // side chains, not just the cartoon backbone), replacing whatever was
+  // there before. One component per chain (rather than one for the whole
+  // click) since styleSideChainComponent below only ever applies one color.
+  // Tracked by each component's state-tree ref so they can be removed again
+  // without touching the base cartoon/coloring component.
   let sideChainComponentRefs = [];
 
+  // A freshly-added component briefly renders with Mol*'s own default theme
+  // (and default, thin size) before any follow-up update lands — each
+  // update is its own async state-tree commit, so the more of them there
+  // are after component.add, the more separate "wrong" frames get painted
+  // in between. This sets color, size and ignoreHydrogens together in one
+  // direct state update per representation (bypassing
+  // component.updateRepresentationsTheme, which only covers color — and,
+  // confirmed live, silently ignores a size/sizeParams theme entirely; the
+  // real size knobs are the representation's own type params: sizeFactor
+  // and linkScale, the shared base radius and the stick's share of it).
   // "element-symbol" with a custom carbonColor colors carbon atoms with the
-  // chain's grey/blue theme while leaving H/N/O/S (and everything else) in
-  // their standard CPK element colors — a plain "uniform" theme was painting
-  // every atom (not just carbon) the chain color, hiding which atoms were
-  // heteroatoms.
-  function sideChainColorTheme(color) {
-    return { color: "element-symbol", colorParams: { carbonColor: { name: "uniform", params: { value: color } } } };
-  }
-
-  // The ball-and-stick representation's sizeTheme only scales the atom
-  // spheres — confirmed live that it leaves the stick (bond) radius
-  // completely unchanged. The actual stick width comes from two of the
-  // representation's own type params instead: sizeFactor (the shared base
-  // radius both balls and sticks scale from) and linkScale (the stick's
-  // radius as a fraction of that). ignoreHydrogens drops the (mostly
-  // uninformative) hydrogens cluttering the side chains.
-  async function thickenSticks(component) {
+  // chain's grey/blue theme while leaving H/N/O/S in their standard CPK
+  // colors — a plain "uniform" theme painted every atom one color, hiding
+  // which atoms were heteroatoms.
+  async function styleSideChainComponent(component, color) {
     for (const repr of component.representations) {
       await viewer.plugin
         .build()
         .to(repr.cell.transform.ref)
         .update((old) => ({
           ...old,
+          colorTheme: {
+            name: "element-symbol",
+            params: { ...(old.colorTheme && old.colorTheme.params), carbonColor: { name: "uniform", params: { value: color } } },
+          },
           type: { ...old.type, params: { ...old.type.params, sizeFactor: 0.35, linkScale: 1, ignoreHydrogens: true } },
         }))
         .commit();
     }
   }
 
+  // A new click (model or diagram) arriving mid-build — this has several
+  // awaited state-tree commits in a row — used to leave things in a
+  // half-applied state: the newer call's clearSideChains() could delete a
+  // component the older call was still styling, or the older call could
+  // finish styling *after* the newer call already moved on, stepping on it.
+  // Each call takes a generation number and checks it's still the latest
+  // before every remaining state-tree write; a superseded call just stops,
+  // leaving cleanup/building to whichever call is actually current.
+  let showSideChainsGeneration = 0;
+
   async function showSideChains(residues) {
+    const generation = ++showSideChainsGeneration;
     await clearSideChains();
+    if (generation !== showSideChainsGeneration) return;
     if (!residues || !residues.length) return;
     const { StructureSelectionQuery, Color } = queryMods;
     const colorByChain = new Map((chainColors || []).map(({ chain, rgb }) => [chain, Color.fromRgb(rgb[0], rgb[1], rgb[2])]));
@@ -275,12 +282,15 @@ export async function createStructureViewer(containerId, pdbUrl, chainColors) {
       const updated = viewer.plugin.managers.structure.hierarchy.current.structures[0];
       const comp = updated.components.find((c) => c.cell.obj && c.cell.obj.label === label);
       if (!comp) continue;
+      // Tracked for cleanup regardless of whether a newer call has already
+      // superseded this one — otherwise a component this (now-stale) call
+      // just added would never get deleted by any future clearSideChains().
       sideChainComponentRefs.push(comp.cell.transform.ref);
+      if (generation !== showSideChainsGeneration) return;
       const color = colorByChain.get(chain);
       if (color !== undefined) {
-        await viewer.plugin.managers.structure.component.updateRepresentationsTheme([comp], sideChainColorTheme(color));
+        await styleSideChainComponent(comp, color);
       }
-      await thickenSticks(comp);
     }
   }
 
